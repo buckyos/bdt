@@ -1,8 +1,8 @@
 {
-  "name": "bdt",
-  "version": "0.1.212",
-  "description": "P2P协议实现.",
-  "main": "index.js",
+  "name": "bdt-p2p",
+  "version": "0.1.225",
+  "description": "P2P可靠传输协议.",
+  "main": "bdt.js",
   "directories": {
     "doc": "doc",
     "test": "test"
@@ -14,9 +14,23 @@
     "type": "git",
     "url": "https://github.com/buckyos/bdt.git"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "buckychain",
+  "license": "BSD-3-Clause",
+  "bugs": {
+	"url": "https://github.com/buckyos/bdt/issues"
+  },
+  "homepage": "https://github.com/buckyos/bdt",
+  "keywords": [
+    "p2p",
+    "protocol",
+    "net",
+    "nat",
+	"traversal"
+  ],
   "dependencies": {
-    "msgpack-lite": "^0.1.26",
+    "msgpack-lite": "^0.1.26"
+  },
+  "devDependencies": {
+    "fs-extra": "^6.0.0"
   }
 }
