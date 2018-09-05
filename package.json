@@ -1,6 +1,6 @@
 {
   "name": "bdt-p2p",
-  "version": "0.1.228",
+  "version": "0.1.229",
   "description": "P2P可靠传输协议.",
   "main": "bdt.js",
   "directories": {
@@ -32,5 +32,8 @@
   },
   "devDependencies": {
     "fs-extra": "^6.0.0"
+  },
+  "bin": {
+    "startSN": "./tools/snPeer.js"
   }
 }

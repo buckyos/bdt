@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 const {
     BX_SetLogLevel,
     BLOG_LEVEL_WARN,

@@ -30,7 +30,9 @@
 // P2P是整个项目各模块的整合层，强烈建议从此引用本项目，因此P2P模块也是本项目的实际引用入口；
 // 高级开发者如果想要单独引用其中部分模块进行定制，可参考P2P模块自行引用，或者联系开发者导出子模块；
 const P2P = require('./p2p/p2p');
+const Util = require('./base/util');
 
 module.exports = {
     P2P,
+    Util
 }
