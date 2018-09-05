@@ -75,7 +75,7 @@ class CrashListener {
         LOG_ERROR(err.stack);
         content += Base.blog.getOptions().getFormatter().getLineBreak();
         content += err.stack;
-        LOG_INFO(content);
+        LOG_ERROR(content);
 
         let onCrashResult = '';
         if (this.m_onCrashCallback) {

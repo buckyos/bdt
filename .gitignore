@@ -28,6 +28,7 @@ build/Release
 
 node_modules
 
+./tmp
 
 .vscode
 
