@@ -363,7 +363,7 @@ class BDTConnection extends EventEmitter {
             return err;
         }
         this.m_sessionid = sessionid;
-        blog.debug(`[BDT]: create connection(id=${this.m_id}) from acceptor on vport ${this.m_vport} with remote ${this.m_remote}`);
+        blog.info(`[BDT]: create connection(id=${this.m_id}) from acceptor on vport ${this.m_vport} with remote ${this.m_remote}`);
         return BDT_ERROR.success;
     }
 

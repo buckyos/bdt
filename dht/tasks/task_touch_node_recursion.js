@@ -159,7 +159,13 @@ class TouchNodeTask extends Task {
         outtimePeers.forEach(peerid => this.m_pendingPeerList.delete(peerid));
 
         if (this.m_pendingPeerList.size === 0) {
-            this._onComplete(DHTResult.SUCCESS);
+            if (!this.needRedo()) {
+                this._onComplete(DHTResult.SUCCESS);
+            } else {
+                // 重做一遍
+                this.m_requestPeeridSet.clear();
+                this._startImpl();
+            }
             return;
         }
     }
@@ -212,6 +218,10 @@ class TouchNodeTask extends Task {
         this.m_pendingPeerList.forEach(peerEx => peerEx.resender.finish());
     }
 
+    needRedo() {
+        return false;
+    }
+
     // override以下必须由子类重载
     _getInitTargetNodes() {
         throw new Error('TouchNodeTask._getInitTargetNodes it must be override.');
@@ -250,7 +260,8 @@ class BroadcastNodeTask extends TouchNodeTask {
             assert(serviceDescriptor && serviceDescriptor.isSigninServer(), `peer:${JSON.stringify(peer.toStruct())},servicePath:${JSON.stringify(this.servicePath)}`);
         });
 
-        return this.bucket.getRandomPeers({excludePeerids: this.m_excludePeerids, count: this.m_arrivePeerCount});
+        const excludePeerids = new Set(...this.m_excludePeerids, ...this.m_arrivePeeridSet);
+        return this.bucket.getRandomPeers({excludePeerids: excludePeerids, count: this.m_arrivePeerCount});
     }
 }
 
@@ -265,7 +276,7 @@ class TouchNodeConvergenceTask extends TouchNodeTask {
     _getInitTargetNodes() {
         let option = this.m_isForward? {maxDistance: this.bucket.distanceToLocal(this._targetKey)} : {};
         if (this.m_excludePeerids.size > 0) {
-            option.excludePeerids = this.m_excludePeerids;
+            option.excludePeerids = new Set(...this.m_excludePeerids, ...this.m_arrivePeeridSet);
         }
         return this.bucket.findClosestPeers(this._targetKey, option);
     }

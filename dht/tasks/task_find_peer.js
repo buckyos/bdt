@@ -98,7 +98,7 @@ class FindPeerTask extends TouchNodeConvergenceTask {
     }
 
     _processImpl(response, remotePeer) {
-        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed FindPeer(${this.m_peerid})`);
+        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed FindPeer(${this.m_peerid}), peerlist:${(response.body.n_nodes || []).map(p => p.id)}`);
         this.m_lastResponseTime = TimeHelper.uptimeMS();
         // 合并当前使用的address到eplist，然后恢复response内容
         // 如果address是TCP地址，可能没有记录到eplist，但这个地址可能是唯一可用连接地址
@@ -161,6 +161,10 @@ class FindPeerTask extends TouchNodeConvergenceTask {
     }
 
     _stopImpl() {
+    }
+
+    needRedo() {
+        return this.m_findCount && this.m_foundPeerList.size < this.m_findCount;
     }
 }
 

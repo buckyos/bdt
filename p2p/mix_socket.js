@@ -384,7 +384,7 @@ class MixSocket extends EventEmitter {
                     this.m_stat.udp.send.pkgs++;
                     this.m_stat.udp.send.bytes += buffer.length;
                 }
-                blog.info(`send udp: (${buffer.length}|${sendCount}),total:(${this.m_stat.udp.send.bytes}|${this.m_stat.udp.send.pkgs})`);
+                // blog.info(`send udp: (${buffer.length}|${sendCount}),total:(${this.m_stat.udp.send.bytes}|${this.m_stat.udp.send.pkgs})`);
                 sendCount++;
                 // 用系统默认地址（localhost）替换'0.0.0.0'
                 sendingSocket.send(buffer, remoteAddr.port, mapZeroIP(remoteAddr),
@@ -411,7 +411,7 @@ class MixSocket extends EventEmitter {
                         this.m_stat.tcp.send.pkgs++;
                         this.m_stat.tcp.send.bytes += buffer.length;
                     }
-                    blog.info(`send tcp: (${buffer.length}|${sendCount}),total:(${this.m_stat.tcp.send.bytes}|${this.m_stat.tcp.send.pkgs})`);
+                    // blog.info(`send tcp: (${buffer.length}|${sendCount}),total:(${this.m_stat.tcp.send.bytes}|${this.m_stat.tcp.send.pkgs})`);
                     sendCount++;
     
                     connection.sendQueue.push(buffer);
@@ -632,7 +632,7 @@ class MixSocket extends EventEmitter {
                 this.m_stat.udp.recv.pkgs++;
                 this.m_stat.udp.recv.bytes += msg.length;
             }
-            blog.info(`recv udp: (${msg.length}), total: (${this.m_stat.udp.recv.bytes}|${this.m_stat.udp.recv.pkgs})`);
+            // blog.info(`recv udp: (${msg.length}), total: (${this.m_stat.udp.recv.bytes}|${this.m_stat.udp.recv.pkgs})`);
 
             let offset = 0;
             while (offset < msg.length) {
@@ -655,7 +655,7 @@ class MixSocket extends EventEmitter {
                 this.m_stat.tcp.recv.pkgs++;
                 this.m_stat.tcp.recv.bytes += msg.length;
             }
-            blog.info(`recv tcp: (${msg.length}), total: (${this.m_stat.tcp.recv.bytes}|${this.m_stat.tcp.recv.pkgs})`);
+            // blog.info(`recv tcp: (${msg.length}), total: (${this.m_stat.tcp.recv.bytes}|${this.m_stat.tcp.recv.pkgs})`);
             
             let recvQueue = connection.recvQueue;
             recvQueue.push(msg);
