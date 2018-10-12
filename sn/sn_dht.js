@@ -26,7 +26,7 @@
 
 'use strict';
 
-const {Config, Result: DHTResult, HashDistance} = require('../dht/util.js');
+const {Config, Result: DHTResult, HashDistance, GetValueFlag} = require('../dht/util.js');
 const EventEmitter = require('events');
 const DHTPeer = require('../dht/peer.js');
 const assert = require('assert');
@@ -290,37 +290,22 @@ class SNDHT {
             }
         }
 
-        if (this._getNearSNDistance() === HashDistance.MAX_HASH) {
-            this.m_fatherDHT.getValue(SN_DHT_SERVICE_ID, peerid, 0, ({result, values}) => {
-                let snList = [];
-                if (values) {
-                    values.forEach((eplist, peerid) => {
-                        let peer = {peerid, eplist};
-                        this.m_fatherDHT.ping(peer);
-                        snList.push(peer);
-                    });
-                }
-                snList = this._filterNearSNList(snList, HashDistance.checkHash(peerid));
-                callback(result, snList);
-            });
-        } else {
-            let generateCallback = handle => ({result, peerlist}) => {
-                if (!handle) {
-                    return;
-                }                    
-                let targetHash = HashDistance.checkHash(peerid);
-                if (!peerlist) {
-                    peerlist = [];
-                }
-                peerlist = peerlist.concat(this.m_snDHT.getAllOnlinePeers());
-                let snList = this._filterNearSNList(peerlist, targetHash);
-
-                result = snList.length > 0? DHTResult.SUCCESS : DHTResult.FAILED;
-                return handle(result, snList);
+        let generateCallback = handle => ({result, peerlist}) => {
+            if (!handle) {
+                return;
+            }                    
+            let targetHash = HashDistance.checkHash(peerid);
+            if (!peerlist) {
+                peerlist = [];
             }
+            peerlist = peerlist.concat(this.m_snDHT.getAllOnlinePeers());
+            let snList = this._filterNearSNList(peerlist, targetHash);
 
-            this.m_snDHT.findPeer(peerid, generateCallback(callback), generateCallback(onStep));
+            result = snList.length > 0? DHTResult.SUCCESS : DHTResult.FAILED;
+            return handle(result, snList);
         }
+
+        this.m_snDHT.findPeer(peerid, generateCallback(callback), generateCallback(onStep));
     }
 
     _tryJoinService(isSeed, immediately) {

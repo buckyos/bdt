@@ -179,22 +179,25 @@ class SequenceIncreaseGenerator {
     }
 }
 
-// SaveValue(tableName, OBJECT_KEY, value) : table[OBJECT_KEY] = value
+// SaveValue(tableName, USER_DEFINED_KEY, value) : table[USER_DEFINED_KEY] = value
 // SaveValue(tableName, TOTAL_KEY, value): not support 不支持更新整个表，防止有人恶意刷新整个表导致整个表内容丢失
-// DeleteValue(tableName, OBJECT_KEY) : table.delete(OBJECT_KEY) 删除本地发起SaveValue的OBJECT_KEY
+// DeleteValue(tableName, USER_DEFINED_KEY) : table.delete(USER_DEFINED_KEY) 删除本地发起SaveValue的USER_DEFINED_KEY
 // DeleteValue(tableName, TOTAL_KEY): 删除所有本地发起SaveValue的表名为tableName的数据
-// GetValue(tableName, OBJECT_KEY): return table[OBJECT_KEY]
+// GetValue(tableName, USER_DEFINED_KEY): return table[USER_DEFINED_KEY]
 // GetValue(tableName, TOTAL_KEY): return table
-const OBJECT_KEY = 'DHTValueTable.Object';
+const USER_DEFINED_KEY = 'DHTValueTable.UserDefined';
 const TOTAL_KEY = 'DHTValueTable.TotalTable';
 
-const FLAG_PRECISE = 0x1
+const GetValueFlag = {
+    Precise: 0x0,
+    KeyHashClose: 0x1,
+    UpdateLatest: 0x2,
+};
 
 module.exports.Result = Result;
 module.exports.MAX_SAFE_INTEGER = MAX_SAFE_INTEGER; // 2^53-1 最大安全整数
 module.exports.MAX_UINT32 = MAX_UINT32;
-module.exports.FLAG_PRECISE = FLAG_PRECISE;
-module.exports.OBJECT_KEY = OBJECT_KEY;
+module.exports.GetValueFlag = GetValueFlag;
 module.exports.TOTAL_KEY = TOTAL_KEY;
 module.exports.Config = Config;
 module.exports.SequenceIncreaseGenerator = SequenceIncreaseGenerator;

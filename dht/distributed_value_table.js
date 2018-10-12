@@ -118,6 +118,14 @@ class DistributedValueTableMgr {
         }
         return null;
     }
+    
+    findLatestValues(tableName, keyName, {count = ValueTableConfig.FindCloseKeyCount, maxDistance = HashDistance.MAX_HASH} = {}) {
+        let table = this.m_tables.get(tableName);
+        if (table) {
+            return table.findLatestValues(keyName, {count, maxDistance});
+        }
+        return null;
+    }
 
     forEachValue(valueProcess) {
         for (let [tableName, table] of this.m_tables) {
@@ -242,7 +250,7 @@ class DistributedValueTable {
                 let done = false;
                 for (let j = 0; j < foundValueList.length; j++) {
                     if (HashDistance.compareHash(curValueDistance, HashDistance.calcDistanceByHash(foundValueList[j].valueObj.keyHash, hash)) < 0) {
-                        foundValueList.splice(j, 0, {valueObj, key: key});
+                        foundValueList.splice(j, 0, {valueObj, key});
                         done = true;
                         if (foundValueList.length > count) {
                             foundValueList.pop();
@@ -251,7 +259,7 @@ class DistributedValueTable {
                     }
                 }
                 if (!done) {
-                    foundValueList.push({valueObj, key: key});
+                    foundValueList.push({valueObj, key});
                 }
             }
         }
@@ -260,6 +268,44 @@ class DistributedValueTable {
         foundValueList.forEach(item => foundValueTable.set(item.key, item.valueObj.value));
         return foundValueTable;
     }
-}
+
+    findLatestValues(keyName, {count = ValueTableConfig.FindCloseKeyCount, maxDistance = HashDistance.MAX_HASH} = {}) {
+        LOG_ASSERT(count >= 0, `Try find negative(${count}) values.`);
+        if (count < 0) {
+            return new Map();
+        }
+
+        let hash = HashDistance.checkHash(keyName);
+        let foundValueList = [];
+        for (let [key, valueObj] of this.m_values) {
+            let curValueDistance = HashDistance.calcDistanceByHash(valueObj.keyHash, hash);
+            if (HashDistance.compareHash(curValueDistance, maxDistance) > 0) {
+                continue;
+            }
+
+            let latestValue = foundValueList.length > 0? foundValueList[foundValueList.length - 1] : null;
+            if (foundValueList.length < count
+                || valueObj.updateTime < latestValue.valueObj.updateTime) {
+                let done = false;
+                for (let j = 0; j < foundValueList.length; j++) {
+                    if (valueObj.updateTime < foundValueList[j].valueObj.updateTime) {
+                        foundValueList.splice(j, 0, {valueObj, key});
+                        done = true;
+                        if (foundValueList.length > count) {
+                            foundValueList.pop();
+                        }
+                        break;
+                    }
+                }
+                if (!done) {
+                    foundValueList.push({valueObj, key});
+                }
+            }
+        }
+
+        let foundValueTable = new Map();
+        foundValueList.forEach(item => foundValueTable.set(item.key, item.valueObj.value));
+        return foundValueTable;
+    }}
 
 module.exports = DistributedValueTableMgr;

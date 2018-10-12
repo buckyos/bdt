@@ -308,8 +308,12 @@ class BDTConnection extends EventEmitter {
                 }
             }
         }
-        this.m_heartbeat.lastSendTime = TimeHelper.uptimeMS();
-        this.m_remote.sender.postPackage(encoder, this._onSendPackage, !this.useTCP);
+
+        // 与对方取得直接联系前，连接断开后，sender都是null
+        if (this.m_remote.sender) {
+            this.m_heartbeat.lastSendTime = TimeHelper.uptimeMS();
+            this.m_remote.sender.postPackage(encoder, this._onSendPackage, !this.useTCP);
+        }
     }
 
     _connect(params) {
@@ -578,7 +582,7 @@ class BDTConnection extends EventEmitter {
             }
         }
         
-        // TCP应该始终确定remoteEP和socket
+        // TCP和动态socket应该始终确定remoteEP和socket
         if (this.m_remote.sender && !this.m_useTCP && !this.m_remote.isDynamic) {
             this.m_remote.sender.addRemoteEPList(remoteSender.remoteEPList);
             if (this.m_remote.sender.isResend) {
@@ -793,7 +797,7 @@ class BDTConnection extends EventEmitter {
                                 peer.dynamicRemoteSender = BDTPackage.createSender(dynamicSocket, socket, []);
                                 peer.dynamicSender.postPackage(dynamicCallPackage);
                             } else {
-                                socket.close();
+                                dynamicSocket.releaseSocket(socket);
                             }
                         }
                     });
@@ -954,7 +958,7 @@ class BDTConnection extends EventEmitter {
                     snInfo.dynamicSender !== 'creating' &&
                     this.m_remote.sender &&
                     snInfo.dynamicSender.socket !== this.m_remote.sender.socket) {
-                        snInfo.dynamicSender.socket.close();
+                        snInfo.dynamicSender.mixSocket.releaseSocket(snInfo.dynamicSender.socket);
                         snInfo.dynamicSender = null;
                     }
             }
@@ -1152,7 +1156,7 @@ class BDTConnection extends EventEmitter {
                     dynamicInfo.sender !== 'creating' &&
                     this.m_remote.sender &&
                     dynamicInfo.sender.socket !== this.m_remote.sender.socket) {
-                    dynamicInfo.sender.socket.close();
+                    dynamicInfo.sender.mixSocket.releaseSocket(dynamicInfo.sender.socket);
                 }
             }
             this.m_dynamicSNCalled = null;
@@ -1325,7 +1329,7 @@ class BDTConnection extends EventEmitter {
             this.m_stack._releaseSessionid(this.m_sessionid, this);
             
             if (this.m_remote.isDynamic && this.m_remote.sender) {
-                this.m_remote.sender.socket.close();
+                this.m_remote.sender.mixSocket.releaseSocket(this.m_remote.sender.socket);
                 this.m_remote.sender = null;
             }
             setImmediate(()=>{
@@ -1409,7 +1413,7 @@ class BDTConnection extends EventEmitter {
                         dynamicInfo.remoteSender = BDTPackage.createSender(dynamicSocket, socket, []);
                         dynamicInfo.sender.postPackage(createCalledResp());
                     } else {
-                        socket.close();
+                        dynamicSocket.releaseSocket(socket);
                     }
                 }
             });

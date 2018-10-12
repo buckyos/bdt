@@ -28,7 +28,7 @@
 
 const EventEmitter = require('events');
 const Base = require('../base/base.js');
-const {HashDistance, Result: DHTResult, Config, EndPoint, FLAG_PRECISE, TOTAL_KEY} = require('./util.js');
+const {HashDistance, Result: DHTResult, Config, EndPoint, GetValueFlag, TOTAL_KEY} = require('./util.js');
 const {Peer, LocalPeer} = require('./peer.js');
 const Bucket = require('./bucket.js');
 const DistributedValueTable = require('./distributed_value_table.js');
@@ -81,11 +81,7 @@ class DHTBase extends EventEmitter {
         this.m_packageSender.taskExecutor = this.m_taskExecutor;
         this.m_packageSender.on(PackageSender.Events.localPackage,
             cmdPackage => {
-                let rootDHT = this;
-                while (rootDHT.m_father) {
-                    rootDHT = rootDHT.m_father;
-                }
-                this._process(cmdPackage, this.m_bucket.localPeer);
+                this.rootDHT._process(cmdPackage, this.m_bucket.localPeer);
             });
 
         env.taskExecutor = this.m_taskExecutor;
@@ -105,6 +101,14 @@ class DHTBase extends EventEmitter {
         return peer;
     }
 
+    get rootDHT() {
+        let _rootDHT = this;
+        while (_rootDHT.m_father) {
+            _rootDHT = _rootDHT.m_father;
+        }
+        return _rootDHT;
+    }
+    
     // callback({result, peerlist})
     // onStep({result, peerlist}): 阶段性返回找到的peer，部分应用更需要响应的及时性，返回true将中断本次搜索，callback返回result=ABORT(7)
     findPeer(peerid, callback, onStep) {
@@ -213,7 +217,7 @@ class DHTBase extends EventEmitter {
     }
 
     // callback({result, values: Map<key, value>})
-    getValue(tableName, keyName, flags = FLAG_PRECISE, callback = undefined) {
+    getValue(tableName, keyName, flags = GetValueFlag.Precise, callback = undefined) {
         const generateCallback = handler => {
             this._getValue(tableName, keyName, flags, (result, values = new Map()) => {
                 handler({result, values})
@@ -227,7 +231,7 @@ class DHTBase extends EventEmitter {
         }
     }
 
-    _getValue(tableName, keyName, flags = FLAG_PRECISE, callback = undefined) {
+    _getValue(tableName, keyName, flags = GetValueFlag.Precise, callback = undefined) {
         if (typeof tableName === 'string' && tableName.length > 0
             && typeof keyName === 'string' && keyName.length > 0) {
 
@@ -236,7 +240,7 @@ class DHTBase extends EventEmitter {
             // 可能本地节点就是最距离目标table最近的节点
 /*            let values = null;
             if (keyName === TOTAL_KEY
-                || (flags & FLAG_PRECISE)) {
+                || (flags & GetValueFlag.Precise)) {
                 values = this.m_distributedValueTable.findValue(tableName, keyName);
             } else {
                 values = this.m_distributedValueTable.findClosestValues(tableName, keyName);
@@ -332,7 +336,14 @@ class DHTBase extends EventEmitter {
         return BASE_DHT_SERVICE_ID;
     }
 
+    /**
+     * 准备一个访问/提供特定服务的DHT子网
+     * @param {string|Array[string]} servicePath: 服务子网路径，字符串表示就在当前路径下，数组表示相对当前路径的相对路径  
+     */
     prepareServiceDHT(servicePath) {
+        if (typeof servicePath === 'string') {
+            servicePath = [servicePath];
+        }
         LOG_DEBUG(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) prepareServiceDHT(${servicePath})`);
         if (!servicePath || servicePath.length <= 0) {
             LOG_ASSERT(false, `prepareServiceDHT invalid args type, (servicePath: ${servicePath}).`);
@@ -892,6 +903,7 @@ DHT.EVENT = {
 DHT.RESULT = DHTResult;
 DHT.Package = DHTPackage;
 
+// DHT服务子网，在整体DHT网络中提供某种特定服务的节点构成的子DHT网络
 class ServiceDHT extends DHTBase {
     constructor(father, serviceID) {
         super(father.m_packageSender.mixSocket,
@@ -980,6 +992,39 @@ class ServiceDHT extends DHTBase {
 
     isRunning() {
         return this.m_flags != 0;
+    }
+
+    _findPeer(peerid, callback, onStep) {
+        // 1.先在子网内搜索，成功则返回
+        const onFindPeerComplete = (result, peers = []) => {
+            const localPeer = this.m_bucket.localPeer;
+            if (peers.length === 0 ||
+                (peers.length === 1 && peers[0].peerid === localPeer.peerid)) {
+                
+                // 2.没找到，或者只找到自己，搜索一下VALUE表中搜索
+                const serviceTableName = this.servicePath.join('@');
+                this._getValue(serviceTableName, localPeer.peerid, GetValueFlag.UpdateLatest,
+                    ({result, values}) => {
+                        if (!values || values.size === 0) {
+                            // 3.如果VALUE表中也没有搜索到，把自己写入VALUE表，失败返回
+                            this.saveValue(serviceTableName, localPeer.peerid, localPeer.eplist);
+                            callback(DHTResult.SUCCESS, []);
+                        } else {
+                            // 4.如果从VALUE表中找到节点信息，成功则把找到的节点放入本地路由表
+                            let peersFromTable = [];
+                            values.forEach((eplist, peerid) => {
+                                let peer = new Peer({peerid, eplist});
+                                this.rootDHT.ping(peer);
+                                peersFromTable.push(peer);
+                            });
+                            callback(DHTResult.SUCCESS, peersFromTable);
+                        }
+                    });
+            } else {
+                callback(result, peers);
+            }
+        }
+        return super._findPeer(peerid, onFindPeerComplete, onStep);
     }
 
     _onStartWork() {

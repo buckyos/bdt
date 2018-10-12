@@ -355,55 +355,55 @@ async function main() {
             // get自己保存的值
             client = normalNodeList[0];
             // 精确查找
-    /*        client.getValue('table_1', 'key_string', 1);
-            client.getValue('table_1', 'key_number', 1);
-            client.getValue('table_1', 'key_bool', 1);
-            client.getValue('table_1', 'key_array', 1);
-            client.getValue('table_1', 'key_object', 1);
-            client.getValue('table_1', 'key_arrayArray', 1);
-            client.getValue('table_1', 'key_objectArray', 1);
+    /*        client.getValue('table_1', 'key_string', DHTUtil.GetValueFlag.Precise);
+            client.getValue('table_1', 'key_number', DHTUtil.GetValueFlag.Precise);
+            client.getValue('table_1', 'key_bool', DHTUtil.GetValueFlag.Precise);
+            client.getValue('table_1', 'key_array', DHTUtil.GetValueFlag.Precise);
+            client.getValue('table_1', 'key_object', DHTUtil.GetValueFlag.Precise);
+            client.getValue('table_1', 'key_arrayArray', DHTUtil.GetValueFlag.Precise);
+            client.getValue('table_1', 'key_objectArray', DHTUtil.GetValueFlag.Precise);
 
             // 相近查找
-            client.getValue('table_1', 'key_string', 0);
-            client.getValue('table_1', 'key_number', 0);
-            client.getValue('table_1', 'key_bool', 0);
-            client.getValue('table_1', 'key_array', 0);
-            client.getValue('table_1', 'key_object', 0);
-            client.getValue('table_1', 'key_arrayArray', 0);
-            client.getValue('table_1', 'key_objectArray', 0);
+            client.getValue('table_1', 'key_string', DHTUtil.GetValueFlag.KeyHashClose);
+            client.getValue('table_1', 'key_number', DHTUtil.GetValueFlag.KeyHashClose);
+            client.getValue('table_1', 'key_bool', DHTUtil.GetValueFlag.KeyHashClose);
+            client.getValue('table_1', 'key_array', DHTUtil.GetValueFlag.KeyHashClose);
+            client.getValue('table_1', 'key_object', DHTUtil.GetValueFlag.KeyHashClose);
+            client.getValue('table_1', 'key_arrayArray', DHTUtil.GetValueFlag.KeyHashClose);
+            client.getValue('table_1', 'key_objectArray', DHTUtil.GetValueFlag.KeyHashClose);
 
             // 查找所有
-            client.getValue('table_1', DHTUtil.TOTAL_KEY, 0);
+            client.getValue('table_1', DHTUtil.TOTAL_KEY, DHTUtil.GetValueFlag.KeyHashClose);
 
             // get 其他peer保存的值
             client = normalNodeList[2];
             // 精确查找
-            client.getValue('table_1', 'key_string', 1);
-            client.getValue('table_1', 'key_number', 1);
-            client.getValue('table_1', 'key_bool', 1);
-            client.getValue('table_1', 'key_array', 1);
-            client.getValue('table_1', 'key_object', 1);
-            client.getValue('table_1', 'key_arrayArray', 1);
-            client.getValue('table_1', 'key_objectArray', 1);
+            client.getValue('table_1', 'key_string', DHTUtil.GetValueFlag.Precise);
+            client.getValue('table_1', 'key_number', DHTUtil.GetValueFlag.Precise);
+            client.getValue('table_1', 'key_bool', DHTUtil.GetValueFlag.Precise);
+            client.getValue('table_1', 'key_array', DHTUtil.GetValueFlag.Precise);
+            client.getValue('table_1', 'key_object', DHTUtil.GetValueFlag.Precise);
+            client.getValue('table_1', 'key_arrayArray', DHTUtil.GetValueFlag.Precise);
+            client.getValue('table_1', 'key_objectArray', DHTUtil.GetValueFlag.Precise);
             // 相近查找
-            client.getValue('table_1', 'key_string', 0);
-            client.getValue('table_1', 'key_number', 0);
-            client.getValue('table_1', 'key_bool', 0);
-            client.getValue('table_1', 'key_array', 0);
-            client.getValue('table_1', 'key_object', 0);
-            client.getValue('table_1', 'key_arrayArray', 0);
-            client.getValue('table_1', 'key_objectArray', 0);*/
+            client.getValue('table_1', 'key_string', DHTUtil.GetValueFlag.KeyHashClose);
+            client.getValue('table_1', 'key_number', DHTUtil.GetValueFlag.KeyHashClose);
+            client.getValue('table_1', 'key_bool', DHTUtil.GetValueFlag.KeyHashClose);
+            client.getValue('table_1', 'key_array', DHTUtil.GetValueFlag.KeyHashClose);
+            client.getValue('table_1', 'key_object', DHTUtil.GetValueFlag.KeyHashClose);
+            client.getValue('table_1', 'key_arrayArray', DHTUtil.GetValueFlag.KeyHashClose);
+            client.getValue('table_1', 'key_objectArray', DHTUtil.GetValueFlag.KeyHashClose);*/
             // 查找所有
-            client.getValue('table_1', DHTUtil.TOTAL_KEY, 0);
+            client.getValue('table_1', DHTUtil.TOTAL_KEY, DHTUtil.GetValueFlag.KeyHashClose);
 
     /*        // 查找不存在的table
-            client.getValue('table_notexist', 'key_string', 1);
-            client.getValue('table_notexist', 'key_string', 0);
-            client.getValue('table_notexist', DHTUtil.TOTAL_KEY, 0);
+            client.getValue('table_notexist', 'key_string', DHTUtil.GetValueFlag.Precise);
+            client.getValue('table_notexist', 'key_string', DHTUtil.GetValueFlag.KeyHashClose);
+            client.getValue('table_notexist', DHTUtil.TOTAL_KEY, DHTUtil.GetValueFlag.KeyHashClose);
 
             // 查找不存在的key
-            client.getValue('table_1', 'key_notexist', 1);
-            client.getValue('table_1', 'key_notexist', 0);*/
+            client.getValue('table_1', 'key_notexist', DHTUtil.GetValueFlag.Precise);
+            client.getValue('table_1', 'key_notexist', DHTUtil.GetValueFlag.KeyHashClose);*/
         }
 
         setTimeout(() => startGetValue(), 5000);

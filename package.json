@@ -1,6 +1,6 @@
 {
   "name": "bdt-p2p",
-  "version": "0.1.230",
+  "version": "0.1.231",
   "description": "P2P可靠传输协议.",
   "main": "bdt.js",
   "directories": {

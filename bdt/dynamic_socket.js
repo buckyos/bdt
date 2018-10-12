@@ -24,6 +24,12 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+/**
+ * 动态分配新UDP端口用于通信
+ * 主要起两点作用：
+ * 1.管理历史分配端口，尽量拉长同一端口重复使用的时间间隔
+ * 2.适配mixSocket接口，做到调用形式上的统一
+ */
 "use strict";
 const dgram = require('dgram');
 const {EndPoint, TimeHelper} = require('../base/util.js');
@@ -49,7 +55,7 @@ class DynamicSocket {
         this.m_options = {
             minPort: 40809,
             maxPort: 60809,
-            portDeadTime: 3600809,
+            portDeadTime: 600809,
         };
 
         if (options) {
@@ -143,9 +149,10 @@ class DynamicSocket {
                 socket.on('error', error => {
                     blog.debug(`[dynsock]: socket bind udp '0.0.0.0':${port} failed, error:${error}.`);
                     // this.m_sockets.delete(port);
-                    socketInfo.socket = null;
-                    if (socket) {
+                    // 可能已经被关闭，或者在bind过程中就error了
+                    if (socketInfo.socket || !bindSucc) {
                         socket.close();
+                        socketInfo.socket = null;
                     }
                     if (bindSucc) {
                         return;
@@ -166,7 +173,7 @@ class DynamicSocket {
             localAddr = socket.address();
         } catch (error) {
             // socket可能已经关闭
-            return;
+            return BDT_ERROR.invalidState;
         }
         let socketInfo = this.m_sockets.get(localAddr.port);
         if (!socketInfo) {
@@ -208,7 +215,29 @@ class DynamicSocket {
                     }
                 });
         });
+        return BDT_ERROR.success;
     }        
+
+    releaseSocket(sock) {
+        let localAddr = null;
+        try {
+            localAddr = sock.address();
+        } catch (error) {
+            // socket可能已经关闭
+            return BDT_ERROR.invalidState;
+        }
+        let socketInfo = this.m_sockets.get(localAddr.port);
+        if (!socketInfo) {
+            return BDT_ERROR.invalidArgs;
+        }
+
+        this.m_sockets.delete(localAddr.port);
+        if (socketInfo.socket) {
+            socketInfo.socket.close();
+            socketInfo.socket = null;
+        }
+        return BDT_ERROR.success;
+    }
 
     _selectPort() {
         let now = TimeHelper.uptimeMS();

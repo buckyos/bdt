@@ -28,7 +28,7 @@
 
 const Base = require('../base/base.js');
 const BaseUtil = require('../base/util.js');
-const {Config, FLAG_PRECISE, TOTAL_KEY} = require('./util.js');
+const {Config, GetValueFlag, TOTAL_KEY} = require('./util.js');
 const {Peer} = require('./peer.js');
 const Bucket = require('./bucket.js');
 const DHTPackage = require('./packages/package.js');
@@ -170,7 +170,7 @@ class PackageProcessor {
     _processFindValue(cmdPackage, remotePeer) {
         let values = null;
         if (!('flags' in cmdPackage.body)) {
-            cmdPackage.body.flags = FLAG_PRECISE;
+            cmdPackage.body.flags = GetValueFlag.Precise;
         }
 
         let {tableName, key, flags} = cmdPackage.body;
@@ -182,10 +182,12 @@ class PackageProcessor {
         }
             
         if (key === TOTAL_KEY
-            || (flags & FLAG_PRECISE)) {
+            || (flags === GetValueFlag.Precise)) {
             values = this.m_distributedValueTable.findValue(tableName, key);
-        } else {
+        } else if (flags === GetValueConfig.KeyHashClose) {
             values = this.m_distributedValueTable.findClosestValues(tableName, key);
+        } else if (flags === GetValueConfig.UpdateLatest) {
+            values = this.m_distributedValueTable.findLatestValues(tableName, key);
         }
         
         let response = (arrivedPeerids) => {
