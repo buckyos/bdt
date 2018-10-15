@@ -694,7 +694,6 @@ class DHT extends DHTBase {
             },
         };
 
-
         return stat;
     }
 
@@ -1007,7 +1006,11 @@ class ServiceDHT extends DHTBase {
                     ({result, values}) => {
                         if (!values || values.size === 0) {
                             // 3.如果VALUE表中也没有搜索到，把自己写入VALUE表，失败返回
-                            this.saveValue(serviceTableName, localPeer.peerid, localPeer.eplist);
+                            const serviceDescriptor = localPeer.findService(this.servicePath);
+                            const isInService = serviceDescriptor && serviceDescriptor.isSigninServer();
+                            if (isInService) {
+                                this.saveValue(serviceTableName, localPeer.peerid, localPeer.eplist);
+                            }
                             callback(DHTResult.SUCCESS, []);
                         } else {
                             // 4.如果从VALUE表中找到节点信息，成功则把找到的节点放入本地路由表
