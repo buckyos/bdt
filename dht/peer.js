@@ -43,7 +43,7 @@ const LOG_ASSERT = Base.BX_ASSERT;
 const LOG_ERROR = Base.BX_ERROR;
 
 class Peer {
-    constructor({peerid, eplist, natType = NAT_TYPE.unknown, onlineDuration = 0, services = null, additionalInfo = null, hash = null, RTT = 0}) {
+    constructor({peerid, eplist, natType = NAT_TYPE.unknown, onlineDuration = 0, services = null, additionalInfo = null, hash = null, RTT = 0, inactive = false}) {
         let now = TimeHelper.uptimeMS();
         this.m_peerid = peerid;
         this.m_eplist = new Set(eplist || []);
@@ -62,6 +62,9 @@ class Peer {
             this.m_hash = hash;
         } else {
             this.m_hash = calcHash;
+        }
+        if (inactive) {
+            this.m_isInactive = inactive;
         }
 
         this.m_isIncome = false;
@@ -248,6 +251,10 @@ class Peer {
             this.m_lastRecvTime = newValue;
         }
     }
+    
+    get inactive() {
+        return this.m_isInactive;
+    }
 
     get additionalInfo() {
         return this.m_additionalInfo;
@@ -367,9 +374,9 @@ class Peer {
 // 本地PEER负责维护自己的地址列表，定时更新当前有效地址
 class LocalPeer extends Peer {
     constructor({peerid, eplist, services = null, additionalInfo = [], hash = null,
-        EP_TIMEOUT = PeerConfig.epTimeout, SYM_EP_COUNT = PeerConfig.symEPCount, _eplistWithUpdateState = null}) {
+        EP_TIMEOUT = PeerConfig.epTimeout, SYM_EP_COUNT = PeerConfig.symEPCount, _eplistWithUpdateState = null, inactive = true}) {
 
-        super({peerid, eplist: [], services, additionalInfo, hash});
+        super({peerid, eplist: [], services, additionalInfo, hash, inactive});
         this.EP_TIMEOUT = EP_TIMEOUT;
         this.SYM_EP_COUNT = SYM_EP_COUNT;
         this.m_eplist = new Map();
@@ -540,7 +547,12 @@ class LocalPeer extends Peer {
     isTimeout() {
         return false;
     }
-    
+
+    active() {
+        this.m_isInactive = false;
+        delete this.m_isInactive;
+    }
+
     setServiceInfo(servicePath, newValue) {
         let descriptor = findService(servicePath);
         if (descriptor) {
@@ -599,6 +611,9 @@ class LocalPeer extends Peer {
         lastIPV6s.forEach(epInfo => listenEPList.push(epInfo.ep));
         lastInitIPV6s.forEach(epInfo => listenEPList.push(epInfo.ep));
         let obj = this.toStruct(listenEPList);
+        if (this.m_isInactive) {
+            obj.inactive = true;
+        }
         return obj;
     }
 

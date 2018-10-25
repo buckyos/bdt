@@ -109,11 +109,11 @@ class DHTBase extends EventEmitter {
         return _rootDHT;
     }
     
-    // callback({result, peerlist})
-    // onStep({result, peerlist}): 阶段性返回找到的peer，部分应用更需要响应的及时性，返回true将中断本次搜索，callback返回result=ABORT(7)
+    // callback({dht, result, peerlist})
+    // onStep({dht, result, peerlist}): 阶段性返回找到的peer，部分应用更需要响应的及时性，返回true将中断本次搜索，callback返回result=ABORT(7)
     findPeer(peerid, callback, onStep) {
         let appendLocalHost = (peers) => {
-            if (peerid === this.m_bucket.localPeer.peerid) {
+            if (!this.m_bucket.localPeer.inactive && peerid === this.m_bucket.localPeer.peerid) {
                 let serviceDescriptor = this.m_bucket.localPeer.findService(this.servicePath);
                 if (!serviceDescriptor || !serviceDescriptor.isSigninServer()) {
                     return;
@@ -153,7 +153,7 @@ class DHTBase extends EventEmitter {
                 result = 0;
                 appendLocalHost(peers);
             }
-            return handler({result, peerlist: peers});
+            return handler({dht: this, result, peerlist: peers});
         }
 
         if (callback) {
@@ -216,11 +216,11 @@ class DHTBase extends EventEmitter {
         }
     }
 
-    // callback({result, values: Map<key, value>})
+    // callback({dht, result, values: Map<key, value>})
     getValue(tableName, keyName, flags = GetValueFlag.Precise, callback = undefined) {
         const generateCallback = handler => {
             this._getValue(tableName, keyName, flags, (result, values = new Map()) => {
-                handler({result, values})
+                handler({dht: this, result, values})
             });
         }
 
@@ -397,8 +397,8 @@ class DHTBase extends EventEmitter {
 
     // @param  <number> count
     // @param  <boolean> fromLocal
-    // @param  <function> callback({result, peerlist})
-    // @param  <function> onStep({result, peerlist})
+    // @param  <function> callback({dht, result, peerlist})
+    // @param  <function> onStep({dht, result, peerlist})
     getRandomPeers(count, fromLocal, callback, onStep) {
         LOG_DEBUG(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) getRandomPeers count(${count}).`);
 
@@ -406,9 +406,9 @@ class DHTBase extends EventEmitter {
         if (fromLocal) {
             const peerlist = this.m_bucket.getRandomPeers({count}).map(peer => new Peer(peer));
             if (callback) {
-                callback({result: DHTResult.SUCCESS, peerlist});
+                callback({dht: this, result: DHTResult.SUCCESS, peerlist});
             } else {
-                return Promise.resolve({result: DHTResult.SUCCESS, peerlist});
+                return Promise.resolve({dht: this, result: DHTResult.SUCCESS, peerlist});
             }
             return DHTResult.SUCCESS;
         }
@@ -417,7 +417,7 @@ class DHTBase extends EventEmitter {
             if (!handler) {
                 return;
             }
-            return handler({result, peerlist: peers});
+            return handler({dht: this, result, peerlist: peers});
         }
 
         if (callback) {
@@ -464,30 +464,27 @@ class DHTBase extends EventEmitter {
     // serviceDescriptor是当前子服务网络的描述符
     _activePeer(peer, isSent, isReceived, isTrust, serviceDescriptor, cmdPackage) {
         // LOG_DEBUG(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) Got new peer(${peer.peerid}) for (send:${isSent},recv:${isReceived},trust:${isTrust}),serviceDescriptor=${serviceDescriptor}`);
-        if (!serviceDescriptor) {
+        if (!serviceDescriptor && !peer.inactive) {
             serviceDescriptor = peer.findService(this.servicePath);
-            if (!serviceDescriptor) {
-                this.m_bucket.removePeer(peer.peerid);
-                return;
-            }
         }
 
         let activedPeer = peer;
-        if (serviceDescriptor.isSigninServer()) {
+        if (!peer.inactive && serviceDescriptor && serviceDescriptor.isSigninServer()) {
             if (this.isRunning()) {
                 let existPeer = this.m_bucket.findPeer(peer.peerid);
                 let isOnlineBefore = existPeer? existPeer.isOnline(this.m_bucket.TIMEOUT_MS) : true;
                 let {peer: activedPeer, isNew, discard, replace} = this.m_bucket.activePeer(peer, isSent, isReceived, isTrust);
                 if (isNew && !discard) {
-                    LOG_TRACE(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) Got new peer(${peer.peerid}) for (send:${isSent},recv:${isReceived},trust:${isTrust}),serviceDescriptor=${serviceDescriptor}`);
+                    LOG_DEBUG(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) Got new peer(${peer.peerid}) for (send:${isSent},recv:${isReceived},trust:${isTrust}),serviceDescriptor=${serviceDescriptor}`);
                     this.m_routeTable.ping(activedPeer);
                 }
             }
         } else {
+            LOG_DEBUG(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) remove peer from bucket(${peer.peerid}) for (inactive:${peer.inactive}),serviceDescriptor=${serviceDescriptor? serviceDescriptor.isSigninServer() : undefined}`);
             this.m_bucket.removePeer(peer.peerid);
         }
 
-        let servicesForPeer = serviceDescriptor.services;
+        let servicesForPeer = serviceDescriptor? serviceDescriptor.services : null;
         if (this.m_subServiceDHTs) {
             this.m_subServiceDHTs.forEach((serviceDHT, serviceID) => {
                 let serviceDescriptor = servicesForPeer? servicesForPeer.get(serviceID) : null;
@@ -625,7 +622,15 @@ class DHT extends DHTBase {
         }
     }
 
-    start() {
+    get appid() {
+        return this.m_packageFactory.appid;
+    }
+
+    /**
+     * 启动DHT网络
+     * @param {boolean} manualActiveLocalPeer 手动激活本地PEER，如果置true，本地peer将不会被其他任何PEER找到，只能作为访问者访问DHT网络
+     */
+    start(manualActiveLocalPeer = false) {
         LOG_DEBUG(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) will start.`);
 
         if (!this.m_timer) {
@@ -636,7 +641,9 @@ class DHT extends DHTBase {
                 this._logStatus();
             }, 200);
             
-            this._activePeer(this.m_bucket.localPeer, false, false, false);
+            if (!manualActiveLocalPeer) {
+                this.activeLocalPeer();
+            }
             this._update();
             setImmediate(() => this.emit(DHT.EVENT.start));
         }
@@ -705,12 +712,23 @@ class DHT extends DHTBase {
             LOG_ERROR(`LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got Invalid message:${message}.`);
             return DHTResult.INVALID_PACKAGE;
         }
+        
+        let cmdPackage = dhtDecoder.decode();
+        if (cmdPackage) {
+            cmdPackage.__isCombine = message.__isCombine;
+        }
+
+        return this.processPackage(socket, dhtDecoder, remoteAddr, localAddr);
+    }
+
+    processPackage(socket, dhtDecoder, remoteAddr, localAddr) {
+        // LOG_DEBUG(`Got package from(${remoteAddr.address}:${remoteAddr.port})`);
+        let localPeer = this.m_bucket.localPeer;
 
         // <TODO> 检查数据包的合法性
         let cmdPackage = dhtDecoder.decode();
         if (cmdPackage) {
-            cmdPackage.__isCombine = message.__isCombine;
-            this._onRecvPackage(cmdPackage, remoteAddr, message);
+            this._onRecvPackage(cmdPackage, remoteAddr, dhtDecoder.totalLength);
         }
 
         if (!cmdPackage || cmdPackage.appid !== this.m_packageFactory.appid) {
@@ -743,7 +761,7 @@ class DHT extends DHTBase {
             return dhtDecoder.totalLength;
         }
 
-        LOG_DEBUG(`LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got package(${DHTPackage.CommandType.toString(cmdPackage.cmdType)}) from(${EndPoint.toString(remoteAddr)}|${cmdPackage.dest.peerid})`);
+        LOG_DEBUG(`LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got package(${DHTPackage.CommandType.toString(cmdPackage.cmdType)}) from(${EndPoint.toString(remoteAddr)}|${cmdPackage.src.peerid})`);
         if (cmdPackage.common.dest.ep) {
             // maintain local peer valid internet address
             localPeer.unionEplist([cmdPackage.common.dest.ep], socket.isReuseListener);
@@ -757,7 +775,10 @@ class DHT extends DHTBase {
         let remotePeer = new Peer(cmdPackage.common.src);
         remotePeer.address = remoteAddr;
         
-        this._activePeer(remotePeer, false, true, true, null, cmdPackage);
+        // 本地PEER是否激活取决于本地逻辑，不取决于数据包内容
+        if (remotePeer.peerid !== localPeer.peerid) {
+            this._activePeer(remotePeer, false, true, true, null, cmdPackage);
+        }
         remotePeer = this.m_bucket.findPeer(remotePeer.peerid) || remotePeer;
         this._process(cmdPackage, remotePeer, remoteAddr, localAddr);
 
@@ -793,6 +814,21 @@ class DHT extends DHTBase {
         return DHTResult.SUCCESS;
     }
 
+    // 激活本地PEER
+    activeLocalPeer() {
+        LOG_INFO('local peer added in bucket.');
+        let localPeer = this.m_bucket.localPeer;
+        localPeer.active();
+        this._activePeer(localPeer, false, false, false);
+
+        // 向其他节点广播自己的状态
+        this.m_bucket.forEachPeer(peer => {
+            if (peer.peerid !== localPeer.peerid) {
+                this.m_routeTable.ping(peer);
+            }
+        });
+    }
+
     ping(remotePeerInfo, immediate) {
         LOG_ASSERT(Peer.isValidPeerid(remotePeerInfo.peerid), `ActivePeer peerid is invalid:${remotePeerInfo.peerid}.`);
         if (!Peer.isValidPeerid(remotePeerInfo.peerid)) {
@@ -805,9 +841,31 @@ class DHT extends DHTBase {
         return DHTResult.SUCCESS;
     }
 
-    // 对某个节点发起主动握手
+    /**
+     * 对某个节点发起主动握手
+     * @param {Peer} remotePeer 握手的目标PEER对象
+     * @param {Peer} agencyPeer 与对方握手时可能提供帮助的中间节点，用于穿透
+     * @param {function({dht, result, remotePeer, isIncoming})} callback 握手完成的回调函数，支持await，
+     *                                                                  result=0表示成功，其他表示失败
+     *                                                                  remotePeer: 表示对方PEER的对象
+     *                                                                  isIncoming: 对方主动连入
+     */
     handshake(remotePeer, agencyPeer, callback) {
-        this.m_taskExecutor.handshakeSource(remotePeer, agencyPeer, false, false, null, callback);
+        const generateCallback = (handler) => (result, targetPeer, isIncoming) => {
+            if (!handler) {
+                return;
+            }
+            return handler({dht: this, result, remotePeer: targetPeer, isIncoming});
+        }
+
+        if (callback) {
+            this.m_taskExecutor.handshakeSource(remotePeer, agencyPeer, false, false, null, generateCallback(callback));
+            return DHTResult.PENDING;
+        } else {
+            return new Promise(resolve => {
+                this.m_taskExecutor.handshakeSource(remotePeer, agencyPeer, false, false, null, generateCallback(resolve));
+            });
+        }
     }
 
     updateLocalPeerAdditionalInfo(keyName, newValue) {
@@ -865,7 +923,7 @@ class DHT extends DHTBase {
         }
     }
 
-    _onRecvPackage(cmdPackage, remoteAddr, message) {
+    _onRecvPackage(cmdPackage, remoteAddr, messageLength) {
         let localPeer = this.m_bucket.localPeer;
         if (!EndPoint.isNAT(remoteAddr)) {
             let stat = this.m_stat.tcp;
@@ -873,7 +931,7 @@ class DHT extends DHTBase {
                 stat = this.m_stat.udp;
             }
             stat.pkgs++;
-            stat.bytes += message.length;
+            stat.bytes += messageLength;
     
             let isResp = DHTCommandType.isResp(cmdPackage.cmdType);
             localPeer.onPackageRecved(isResp);
@@ -970,6 +1028,9 @@ class ServiceDHT extends DHTBase {
         if (this.m_subServiceDHTs.size === 0 && !this.isRunning()) {
             this.m_father._onSubServiceDHTOffWork(this);
         }
+
+        const serviceTableName = this.servicePath.join('@');
+        this.rootDHT.deleteValue(serviceTableName, localPeer.peerid);
     }
 
     updateServiceInfo(key, value) {
@@ -1002,14 +1063,17 @@ class ServiceDHT extends DHTBase {
                 
                 // 2.没找到，或者只找到自己，搜索一下VALUE表中搜索
                 const serviceTableName = this.servicePath.join('@');
-                this._getValue(serviceTableName, localPeer.peerid, GetValueFlag.UpdateLatest,
+                this.rootDHT._getValue(serviceTableName, localPeer.peerid, GetValueFlag.UpdateLatest,
                     ({result, values}) => {
                         if (!values || values.size === 0) {
                             // 3.如果VALUE表中也没有搜索到，把自己写入VALUE表，失败返回
-                            const serviceDescriptor = localPeer.findService(this.servicePath);
-                            const isInService = serviceDescriptor && serviceDescriptor.isSigninServer();
+                            let isInService = !localPeer.inactive;
                             if (isInService) {
-                                this.saveValue(serviceTableName, localPeer.peerid, localPeer.eplist);
+                                const serviceDescriptor = localPeer.findService(this.servicePath);
+                                isInService = serviceDescriptor && serviceDescriptor.isSigninServer();
+                            }
+                            if (isInService) {
+                                this.rootDHT.saveValue(serviceTableName, localPeer.peerid, localPeer.eplist);
                             }
                             callback(DHTResult.SUCCESS, []);
                         } else {

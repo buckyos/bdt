@@ -120,6 +120,18 @@ class SNDHT {
         }
     }
 
+    addSN(snPeer) {
+        if (snPeer) {
+            this.m_fatherDHT.saveValue(SN_DHT_SERVICE_ID, snPeer.peerid, snPeer.eplist);
+        }
+    }
+
+    removeSN(snPeerid) {
+        if (snPeerid) {
+            this.m_fatherDHT.deleteValue(SN_DHT_SERVICE_ID, snPeerid);
+        }
+    }
+
     findSN(peerid, fromCache, callback, onStep = undefined) {
         if (callback) {
             this._findSN(peerid,
@@ -264,7 +276,7 @@ class SNDHT {
             let maskBitCount = 0;
             if (peer instanceof DHTPeer.Peer) {
                 let serviceDescriptor = peer.findService(servicePath);
-                if (serviceDescriptor && serviceDescriptor.isSigninServer()) {
+                if (!peer.inactive && serviceDescriptor && serviceDescriptor.isSigninServer()) {
                     maskBitCount = serviceDescriptor.getServiceInfo([], 'scope') || 0;
                 }
             }

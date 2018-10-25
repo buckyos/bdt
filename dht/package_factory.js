@@ -162,6 +162,9 @@ class PackageEncoder {
             if (src.additionalInfo) {
                 commonObj.src.info = src.additionalInfo;
             }
+            if (src.inactive) {
+                commonObj.src.inactive = true;
+            }
             if (dest.ep) {
                 commonObj.dest.ep = dest.ep;
             }
@@ -338,6 +341,9 @@ class PackageDecoder {
         }
         if ('services' in commonObj.src) {
             pkgCommon.src.services = commonObj.src.services;
+        }
+        if ('inactive' in commonObj.src) {
+            pkgCommon.src.inactive = commonObj.src.inactive;
         }
         if ('nodes' in commonObj) {
             pkgCommon.nodes = commonObj.nodes;

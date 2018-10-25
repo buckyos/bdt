@@ -111,8 +111,11 @@ class FindPeerTask extends TouchNodeConvergenceTask {
         response.common.src.eplist = srcEPList;
 
         // 判定该peer是否在该服务子网
-        let serviceDescriptor = foundPeer.findService(this.servicePath);
-        let isInService = serviceDescriptor && serviceDescriptor.isSigninServer();
+        let isInService = !foundPeer.inactive;
+        if (isInService) {
+            let serviceDescriptor = foundPeer.findService(this.servicePath);
+            isInService = serviceDescriptor && serviceDescriptor.isSigninServer();
+        }
 
         if (isInService) {
             this.m_foundPeerList.set(response.common.src.peerid, foundPeer);

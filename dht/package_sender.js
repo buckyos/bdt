@@ -66,7 +66,6 @@ class PackageSender extends EventEmitter {
 
     sendPackage(toPeer, cmdPackage, ignoreRouteCache, timeout) {
         let localPeer = this.m_bucket.localPeer;
-        let peerStruct = localPeer.toStructForPackage();
         // toPeer可能不是在本地路由表中记录的PEER对象；
         // 在发送时需要更新路由表中PEER对象的一些统计信息，
         // 所以这里要从路由表中重新查找一下
@@ -76,6 +75,7 @@ class PackageSender extends EventEmitter {
         }
 
         if (peer.peerid === localPeer.peerid) {
+            let peerStruct = localPeer.toStructForPackage();
             cmdPackage.fillCommon(peerStruct, peer, []);
             setImmediate(() => this.emit(PackageSender.Events.localPackage, cmdPackage));
             return;
@@ -92,7 +92,7 @@ class PackageSender extends EventEmitter {
                 for (let closePeer of closePeerList) {
                     if (closePeer.isOnline(this.m_bucket.TIMEOUT_MS) &&
                         closePeer.peerid !== peer.peerid &&
-                        closePeer.peerid !== peerStruct.peerid) {
+                        closePeer.peerid !== localPeer.peerid) {
                         recommandNodes.push({id: closePeer.peerid, eplist: closePeer.eplist});
                     }
                 }
@@ -126,22 +126,23 @@ class PackageSender extends EventEmitter {
         let options = {
             ignoreCache: ignoreRouteCache,
             socket: null,
-            onPreSend: (pkg, remoteAddr, socket, protocol) => this._onPreSendPackage(pkg, remoteAddr, socket, protocol, peer, peerStruct, recommandNodes),
+            onPreSend: (pkg, remoteAddr, socket, protocol) => this._onPreSendPackage(pkg, remoteAddr, socket, protocol, peer, recommandNodes),
             dropBusyTCP: true,
             timeout,
         };
         this.m_mixSocket.send(cmdPackage, eplist, options);
     }
 
-    _onPreSendPackage(cmdPackage, remoteAddr, socket, protocol, peer, localPeerInfo, recommandNodes) {
+    _onPreSendPackage(cmdPackage, remoteAddr, socket, protocol, peer, recommandNodes) {
         if (cmdPackage.__isTooLarge) {
             return null;
         }
 
         let now = TimeHelper.uptimeMS();
         let localPeer = this.m_bucket.localPeer;
-
-        cmdPackage.fillCommon(localPeerInfo, peer, recommandNodes);
+        let peerStruct = localPeer.toStructForPackage();
+        
+        cmdPackage.fillCommon(peerStruct, peer, recommandNodes);
         if (!DHTCommandType.isResp(cmdPackage.cmdType)) {
             cmdPackage.common.packageID = g_sendStat.genPackageID();
         }

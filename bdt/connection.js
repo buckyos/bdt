@@ -189,6 +189,10 @@ class BDTConnection extends EventEmitter {
         return this.m_id;
     }
 
+    get state() {
+        return this.m_state;
+    }
+
     bind(vport) {
         if (this.m_stack.state !== BDTStack.STATE.created) {
             blog.error(`[BDT]: connection(id=${this.m_id}) bind when stack not create`);
@@ -499,6 +503,11 @@ class BDTConnection extends EventEmitter {
     }
 
     _onPackage(decoder, remoteSender, isDynamic) {
+        // 关闭或中断不再处理任何报文
+        if (this.m_state === BDTConnection.STATE.closed || this.m_state === BDTConnection.STATE.break) {
+            return;
+        }
+
         let remoteEP = remoteSender.remoteEPList[0];
         if (decoder.header.cmdType === BDTPackage.CMD_TYPE.calledReq) {
             let calledResp = null;

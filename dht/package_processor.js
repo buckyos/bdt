@@ -235,9 +235,11 @@ class PackageProcessor {
 
         if (isNewEvent) {
             // 已经退出服务就不再发出事件通知了，但继续协助做完广播操作
-            let serviceDescriptor = this.m_bucket.localPeer.findService(this.m_servicePath);
-            if (serviceDescriptor && serviceDescriptor.isSigninServer()) {
-                setImmediate(() => this.m_broadcastEventEmitter.emit(event, event, params, source));
+            if (!this.m_bucket.localPeer.inactive) {
+                let serviceDescriptor = this.m_bucket.localPeer.findService(this.m_servicePath);
+                if (serviceDescriptor && serviceDescriptor.isSigninServer()) {
+                    setImmediate(() => this.m_broadcastEventEmitter.emit(event, event, params, source));
+                }
             }
         }
         task.process(cmdPackage, remotePeer);

@@ -77,7 +77,7 @@ class P2P extends EventEmitter {
     }
     
     /*
-        创建一个P2P对象
+        创建一个P2P对象，构造基础socket通信接口
         params:
             peerid:string peer id   必填
             udp: {
@@ -131,13 +131,6 @@ class P2P extends EventEmitter {
                     return;
                 }
 
-                if (params.snPeer) {
-                    p2p.snPeer = params.snPeer;
-                }
-                if (params.dhtEntry) {
-                    p2p.joinDHT(params.dhtEntry);
-                }
-
                 setImmediate(() => p2p.emit(P2P.EVENT.create));
                 resolve({result: BDT.ERROR.success, p2p});
             });
@@ -151,7 +144,9 @@ class P2P extends EventEmitter {
     }
 
     /* 
-        一步创建一个启动了BDT协议栈的P2P对象，一般情况使用这个接口就好了
+        一步创建一个启动了BDT协议栈的P2P对象，snPeer和dhtEntry必须设定其中一个用于穿透的设施；一般情况使用这个接口就好了
+        PS: 该接口整合了create/set snPeer()/joinDHT/startupBDTStack流程，用于构造基本的BDT协议栈；
+            如果要对这些接口调用的参数进行定制，需要自行整合这些接口，否则部分接口将使用部分默认参数执行
         params:
             peerid:string peer id
             udp: {
@@ -164,11 +159,11 @@ class P2P extends EventEmitter {
                 initPort:number initial udp port    默认：0，随机PORT
                 maxPortOffset:number max try bind port offset   默认：0；initPort=0时，忽略该参数
             }
-            snPeer: [{
+            snPeer: [{  // 调用set snPeer()
                 peerid:
                 eplist:
             }]
-            dhtEntry: [{
+            dhtEntry: [{    // 调用joinDHT(dhtEntry)
                 peerid:
                 eplist
             }],
@@ -176,9 +171,7 @@ class P2P extends EventEmitter {
                                             NAT环境下，无法通过udp.addrList和tcp.addrList获知本地PEER的公网访问地址；
                                             可以通过这个参数指定本地PEER的公网访问地址；
                                             如果不指定，则会通过主动对其他PEER的访问响应包分析其公网地址
-            options: {
-
-            }
+            options: {...}  等价于startupBDTStack接口的options参数
     */
     static create4BDTStack(params, callback) {
         function _create4BDTStack() {
@@ -197,7 +190,7 @@ class P2P extends EventEmitter {
                     if (params.snPeer) {
                         p2p.snPeer = params.snPeer;
                     }
-                    if (params.dhtEntry) {
+                    if (params.dhtEntry && params.dhtEntry.length > 0) {
                         p2p.joinDHT(params.dhtEntry);
                     }
             
@@ -266,6 +259,15 @@ class P2P extends EventEmitter {
     // dhtEntryPeers: [{peerid: xxx, eplist:[ep, ...]}]， ep: 'family-num(4|6)@ip@port@protocol(u|t)'
     // asSeedSNInDHT: 如果启动了SN服务，标识是否要作为种子SN写入DHT网络
     joinDHT(dhtEntryPeers, asSeedSNInDHT, options) {
+        let _options = {
+            manualActiveLocalPeer: false,
+            joinDHTImmediately: false,
+        };
+
+        if (options) {
+            Object.assign(_options, options);
+        }
+
         if (!this.m_mixSocket) {
             blog.warn('[P2P]: you should create p2p instance with <P2P.create>, and wait the operation finish.');
         }
@@ -278,14 +280,14 @@ class P2P extends EventEmitter {
                 this.m_dht = null;
                 this._tryCloseSocket();
             });
-            this.m_dht.start();
+            this.m_dht.start(_options.manualActiveLocalPeer);
 
             if (this.m_peerFinder) {
                 this.m_peerFinder.dht = this.m_dht;
             }
 
             if (this.m_snService) {
-                this.m_snService.signinDHT(this.m_dht, asSeedSNInDHT, options.joinDHTImmediately);
+                this.m_snService.signinDHT(this.m_dht, asSeedSNInDHT, _options.joinDHTImmediately);
             }
         }
 
