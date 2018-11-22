@@ -1,3 +1,4 @@
+
 // Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
 // The BDT project is supported by the GeekChain Foundation.
 // All rights reserved.
@@ -24,64 +25,15 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// 带dht的SN测试程序
+/**
+ * 部分通用标准服务希望到DHT网络上登记下来，供其他用户查询使用，在这里注册服务ID；
+ * 服务ID是一个随机字符串，不重复就行
+ */
 
-'use strict'
+'use strict';
 
-const os = require("os");
-const NormalSNServer = require('./normal_sn.js');
-const DHT = require('../../dht/dht.js');
-const DHTUtil = require('../../dht/util.js');
-const CrashListener = require("../crash_listener.js");
+const SERVICEID = {
+    sn: '4243153e8d9843848ae00ca1802235e2',
+};
 
-const path = require("path");
-const Base = require('../../base/base.js');
-const LOG_INFO = Base.BX_INFO;
-const LOG_WARN = Base.BX_WARN;
-const LOG_DEBUG = Base.BX_DEBUG;
-const LOG_CHECK = Base.BX_CHECK;
-const LOG_ASSERT = Base.BX_ASSERT;
-const LOG_ERROR = Base.BX_ERROR;
-
-class DHTSNServer extends NormalSNServer {
-    constructor(peerinfo) {
-        super(peerinfo);
-
-        this.m_dht = null;
-    }
-
-    async start() {
-        await super.start();
-
-        this.m_p2p.joinDHT([{peerid: this.m_peerinfo.seedDHTNode.peerid, eplist: this.m_peerinfo.seedDHTNode.eplist}]);
-    }
-
-    static run(peerinfo) {
-        let snServer = new DHTSNServer(peerinfo);
-        snServer.start();
-    }
-}
-
-if (require.main === module) {
-    let crashListener = new CrashListener();
-    crashListener.listen();
-
-    let args = process.argv.slice(2);
-    let peerinfo = JSON.parse(args[0]);
-
-    let logFolder;
-    if (os.platform() === 'win32') {
-        logFolder = "D:\\blog\\";
-    } else {
-        logFolder = "/var/blog/";
-        Base.BX_SetLogLevel(Base.BLOG_LEVEL_WARN);
-    }
-    crashListener.enableFileLog(logFolder);
-    Base.BX_SetLogLevel(Base.BLOG_LEVEL_WARN);
-    Base.BX_EnableFileLog(logFolder, `${path.basename(require.main.filename, ".js")}-${peerinfo.port}`, '.log');
-    Base.blog.enableConsoleTarget(false);
-
-    DHTSNServer.run(peerinfo);
-}
-
-module.exports = DHTSNServer;
+module.exports = SERVICEID;

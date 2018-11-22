@@ -112,7 +112,9 @@ const EndPoint = {
 
     isLoopback(address) {
         if (typeof address === 'string') {
-            address = EndPoint.toAddress(address);
+            const str = address;
+            address = EndPoint.toAddress(str);
+            assert(address, str);
         }
 
         if (address.family === EndPoint.FAMILY.IPv4) {

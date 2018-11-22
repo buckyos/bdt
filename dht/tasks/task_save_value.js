@@ -68,12 +68,12 @@ class SaveValueTask extends TouchNodeConvergenceTask {
     }
 
     _processImpl(response, remotePeer) {
-        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) SaveValue (${this.m_tableName}) to ${remotePeer.peerid}`);
+        LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) SaveValue (${this.m_tableName}) to ${remotePeer.peerid}`);
         super._processImpl(response, remotePeer);
     }
 
     _onCompleteImpl(result) {
-        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) SaveValue complete(${this.m_tableName})`);
+        LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) SaveValue complete(${this.m_tableName})`);
         this._callback(result, this.m_arrivePeeridSet);
         super.destroy();
     }

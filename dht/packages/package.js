@@ -79,10 +79,10 @@ const CommandType = {
 }
 
 class DHTPackage {
-    constructor(cmdType, seq, appid) {
+    constructor(cmdType, owner) {
         this.m_common = {
             'cmdType': cmdType,
-            'appid': appid || 0,
+            'appid': 0,
             'src': {
                 'hash': undefined,
                 'peerid': undefined,
@@ -95,7 +95,7 @@ class DHTPackage {
                 'peerid': undefined,
                 'ep': null,
             },
-            'seq': seq || 0,
+            'seq': 0,
             'ackSeq': 0,
             'ttl': 0,
             'packageID': 0,
@@ -103,6 +103,11 @@ class DHTPackage {
         };
 
         this.m_body = null;
+        if (owner) {
+            this.m_owner = owner;
+            this.m_common.appid = owner.appid || 0;
+            this.m_common.seq = owner.genSeq();
+        }
     }
 
     get appid() {
@@ -111,6 +116,21 @@ class DHTPackage {
     
     get cmdType() {
         return this.m_common.cmdType;
+    }
+
+    get seq() {
+        return this.m_common.seq;
+    }
+
+    updateSeq() {
+        LOG_ASSERT(this.m_owner);
+        if (this.m_owner) {
+            this.m_common.seq = this.m_owner.genSeq();
+        }
+    }
+
+    get ackSeq() {
+        return this.m_common.ackSeq;
     }
 
     fillCommon(srcPeerInfo, destPeerInfo, recommandNodes = null) {

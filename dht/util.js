@@ -115,6 +115,10 @@ const Config = {
             Max: 600809,
             dynamic(peerCount, peerDelta) { // 根据当前peer数和上次扩充peer增量动态调整扩充频率
                 let interval = 600809;
+                if (peerCount === 0) {
+                    return 2000;
+                }
+                
                 if (peerCount <= 16) {
                     interval = 2000;
                 } else if (peerCount <= 32) {
@@ -164,17 +168,13 @@ const RandomGenerator = {
 };
 
 class SequenceIncreaseGenerator {
-    constructor(lowBound, upBound) {
-        this.m_lowBound = lowBound;
-        this.m_upBound = upBound;
-        this.m_nextSeq = RandomGenerator.integer(upBound, lowBound);
+    constructor() {
+        this.m_nextSeq = BaseUtil.SequenceU32.random();
     }
 
     genSeq() {
-        let seq = this.m_nextSeq++;
-        if (this.m_nextSeq > this.m_upBound) {
-            this.m_nextSeq = this.m_lowBound;
-        }
+        let seq = this.m_nextSeq;
+        this.m_nextSeq = BaseUtil.SequenceU32.add(this.m_nextSeq, 1);
         return seq;
     }
 }

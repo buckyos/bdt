@@ -390,10 +390,10 @@ class PackageDecoder {
     }
 }
 
-class PackageFactory {
+class PackageFactory extends SequenceIncreaseGenerator {
     constructor(appid) {
+        super();
         this.m_appid = appid;
-        this.m_seqGen = new SequenceIncreaseGenerator(PackageConfig.MinSeq, PackageConfig.MaxSeq);
     }
 
     get appid() {
@@ -401,7 +401,7 @@ class PackageFactory {
     }
 
     createPackage(cmdType) {
-        return new DHTPackage(cmdType, this.m_seqGen.genSeq(), this.m_appid);
+        return new DHTPackage(cmdType, this);
     }
 
     static createEncoder(dhtPackage) {

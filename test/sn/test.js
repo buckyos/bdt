@@ -89,8 +89,8 @@ params = Object.assign(defaultParams, params)
 
     try {
         let {result, p2p} = await P2P.create(snDHTServerConfig);
-        await p2p.joinDHT([], true);
-        await p2p.startupSNService(true, {minOnlineTime2JoinDHT: 0});
+        await p2p.joinDHT([]);
+        await p2p.startupSNService({minOnlineTime2JoinDHT: 0});
     } catch(e) {
         ll(e)
     }

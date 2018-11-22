@@ -111,7 +111,7 @@ class BroadcastEventTask extends Task {
 
     // 即使全部广播到位也不完成，因为可能收到其他PEER转发过来的广播通知，任务留下来防止重复广播
     _processImpl(cmdPackage, remotePeer) {
-        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${cmdPackage.common.src.peerid} responsed BroadcastEventTask(${this.m_id})`);
+        LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${cmdPackage.common.src.peerid} responsed BroadcastEventTask(${this.m_id})`);
         
         if (cmdPackage.cmdType === DHTCommandType.BROADCAST_EVENT_REQ) {
             // 因为是从远到近开始广播，所以收到的第一个请求包，来源peer应该距离比较远；

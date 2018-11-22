@@ -31,9 +31,10 @@ const path = require('path');
 const dgram = require('dgram');
 const assert = require('assert');
 const baseModule = require('../base/base');
-const { EndPoint } = require('../base/util')
+const { EndPoint, TimeHelper } = require('../base/util')
 const blog = baseModule.blog;
 
+const DHTAPPID = require('../base/dhtappid.js');
 const BDT = require('../bdt/bdt.js');
 const DHT = require('../dht/dht.js');
 const SN = require('../sn/sn.js');
@@ -67,13 +68,27 @@ class P2P extends EventEmitter {
 
         this.m_mixSocket = null;
         this.m_socketCreator = null;
-        this.m_dht = null;
+
+        this.m_dhtMap = new Map(); // <dhtAppID, dhtInfo{dht,emptyTime,isUser}>
+        this.m_defaultDHTid = DHTAPPID.none;
+        this.m_dhtOptions = {
+            dhtEmptyLimitMS: 600809,
+        };
+
+        // 自动发现DHT
+        this.m_autoFindDHT = false;
+        this.m_dhtFinderOptions = {
+            autoJoin: false,
+        };
+        
         this.m_snPeer = null;
         this.m_peerFinder = null;
         this.m_bdtStack = null;
         this.m_snService = null;
+        this.m_snServiceOptions = {joinDHTImmediately: false};
         this.m_isClosing = false;
         this.m_listenerEPList = null;
+        this.m_timer = null;
     }
     
     /*
@@ -131,6 +146,11 @@ class P2P extends EventEmitter {
                     return;
                 }
 
+                if (!p2p.m_timer) {
+                    p2p.m_timer = setInterval(() => {
+                        p2p._clearEmptyDHT();
+                    }, p2p.m_dhtOptions.dhtEmptyLimitMS >>> 2);
+                }        
                 setImmediate(() => p2p.emit(P2P.EVENT.create));
                 resolve({result: BDT.ERROR.success, p2p});
             });
@@ -163,7 +183,7 @@ class P2P extends EventEmitter {
                 peerid:
                 eplist:
             }]
-            dhtEntry: [{    // 调用joinDHT(dhtEntry)
+            dhtEntry: [{    // 调用joinDHT(dhtEntry)，注意：这里是SN的DHT入口，如果要加入其他DHT网络，需要手动调用joinDHT
                 peerid:
                 eplist
             }],
@@ -191,7 +211,7 @@ class P2P extends EventEmitter {
                         p2p.snPeer = params.snPeer;
                     }
                     if (params.dhtEntry && params.dhtEntry.length > 0) {
-                        p2p.joinDHT(params.dhtEntry);
+                        p2p.joinDHT(params.dhtEntry, {manualActiveLocalPeer: true, dhtAppID: DHTAPPID.sn});
                     }
             
                     p2p.startupBDTStack(params.options).then(result => {
@@ -223,15 +243,23 @@ class P2P extends EventEmitter {
 
         if (this.m_bdtStack) {
             this.m_bdtStack.close();
+            this.m_bdtStack = null;
         }
 
         if (this.m_snService) {
             this.m_snService.stop();
+            this.m_snService = null;
         }
 
-        if (this.m_dht) {
-            this.m_dht.stop();
+        this.m_dhtMap.forEach(dhtInfo => dhtInfo.dht.stop());
+        this.m_dhtMap.clear();
+
+        if (this.m_timer) {
+            clearInterval(this.m_timer);
+            this.m_timer = null;
         }
+
+        this.m_autoFindDHT = false;
     }
 
     get peerid() {
@@ -257,11 +285,11 @@ class P2P extends EventEmitter {
 
     // 如果要通过dht网络检索peer，要调用joinDHT加入dht网络
     // dhtEntryPeers: [{peerid: xxx, eplist:[ep, ...]}]， ep: 'family-num(4|6)@ip@port@protocol(u|t)'
-    // asSeedSNInDHT: 如果启动了SN服务，标识是否要作为种子SN写入DHT网络
-    joinDHT(dhtEntryPeers, asSeedSNInDHT, options) {
+    joinDHT(dhtEntryPeers, options) {
         let _options = {
             manualActiveLocalPeer: false,
-            joinDHTImmediately: false,
+            asDefault: false,
+            dhtAppID: DHTAPPID.none,
         };
 
         if (options) {
@@ -272,33 +300,28 @@ class P2P extends EventEmitter {
             blog.warn('[P2P]: you should create p2p instance with <P2P.create>, and wait the operation finish.');
         }
 
-        if (!this.m_dht) {
-            let eplist = this.eplist;
-
-            this.m_dht = new DHT(this.m_mixSocket, {peerid: this.m_peerid, eplist});
-            this.m_dht.once(DHT.EVENT.stop, () => {
-                this.m_dht = null;
-                this._tryCloseSocket();
-            });
-            this.m_dht.start(_options.manualActiveLocalPeer);
-
-            if (this.m_peerFinder) {
-                this.m_peerFinder.dht = this.m_dht;
-            }
-
-            if (this.m_snService) {
-                this.m_snService.signinDHT(this.m_dht, asSeedSNInDHT, _options.joinDHTImmediately);
-            }
+        let {dht, isNew} = this._createDHT(_options.dhtAppID, true);
+        if (isNew) {
+            dht.start(_options.manualActiveLocalPeer);
         }
 
         for (let peer of dhtEntryPeers) {
-            this.m_dht.activePeer(peer);
+            dht.activePeer(peer);
+        }
+
+        if (_options.asDefault) {
+            this.m_defaultDHTid = _options.dhtAppID;
+            if (this.m_peerFinder) {
+                this.m_peerFinder.dht = dht;
+            }
         }
     }
 
-    disjoinDHT() {
-        if (this.m_dht) {
-            this.m_dht.stop();
+    disjoinDHT(dhtAppID) {
+        const _dhtid = dhtAppID || DHTAPPID.none;
+        let dhtInfo = this.m_dhtMap.get(_dhtid);
+        if (dhtInfo) {
+            this._closeDHT(dhtInfo.dht);
         }
     }
 
@@ -324,7 +347,7 @@ class P2P extends EventEmitter {
         }
 
         // check dhtEntry snPeer
-        if (!this.m_dht && !this.m_snPeer) {
+        if (this.m_dhtMap.size === 0 && !this.m_snPeer) {
             blog.warn('[P2P]: you should set one SN peer(by P2P.snPeer) or dht entry peers (by P2P.joinDHT).');
             return getError()
         }
@@ -335,17 +358,29 @@ class P2P extends EventEmitter {
             return getError()
         }
 
+        let peerFinder = options? options.peerFinder : null;
 
-        this.m_peerFinder = new PeerFinder(this.m_snPeer, this.m_dht);
+        // 用户指定的peerFinder完全由用户控制，不保留
+        if (!peerFinder) {
+            let snDHT = null;
+            const snDHTInfo = this.m_dhtMap.get(DHTAPPID.sn);
+            if (snDHTInfo) {
+                snDHT = snDHTInfo.dht;
+            }
+            this.m_peerFinder = new PeerFinder(this.m_snPeer, snDHT, this.dht);
+            peerFinder = this.m_peerFinder;
+        }
 
         let eplist = this.eplist;
 
-        this.m_bdtStack = BDT.newStack(this.m_peerid, eplist, this.m_mixSocket, this.m_peerFinder, options);
+        this.m_bdtStack = BDT.newStack(this.m_peerid, eplist, this.m_mixSocket, peerFinder, options);
         this.m_bdtStack.once(BDT.Stack.EVENT.create, () => setImmediate(() => this.emit(P2P.EVENT.BDTStackCreate)));
         this.m_bdtStack.once(BDT.Stack.EVENT.close, () => {
             this.m_bdtStack = null;
-            this.m_peerFinder.destory();
-            this.m_peerFinder = null;
+            if (this.m_peerFinder) {
+                this.m_peerFinder.destory();
+                this.m_peerFinder = null;
+            }
             this._tryCloseSocket();
             setImmediate(() => this.emit(P2P.EVENT.BDTStackClose));
         });
@@ -356,7 +391,7 @@ class P2P extends EventEmitter {
     }
 
     // 启动SN服务
-    startupSNService(asSeedSNInDHT, options) {
+    startupSNService(options) {
         if (!this.m_mixSocket) {
             blog.warn('[P2P]: you should create p2p instance with <P2P.create>, and wait the operation finish.');
             return BDT.ERROR.invalidState;
@@ -366,10 +401,12 @@ class P2P extends EventEmitter {
         this.m_snService.start();
         setImmediate(() => this.emit(P2P.EVENT.SNStart));
 
-        if (this.m_dht) {
-            this.m_snService.signinDHT(this.m_dht, asSeedSNInDHT, options.joinDHTImmediately);
+        let snDHTInfo = this.m_dhtMap.get(DHTAPPID.sn);
+        if (snDHTInfo) {
+            this.m_snService.signinDHT(snDHTInfo.dht, options.joinDHTImmediately);
         }
 
+        this.m_snServiceOptions.joinDHTImmediately = options.joinDHTImmediately;
         this.m_snService.once(SN.EVENT.stop, () => {
             this.m_snService = null;
             this._tryCloseSocket();
@@ -378,8 +415,33 @@ class P2P extends EventEmitter {
         return BDT.ERROR.success;
     }
 
+    // 超级DHT入口，支持为多个DHT网络提供接入服务
+    startupSuperDHTEntry(options) {
+        if (options) {
+            Object.assign(this.m_dhtFinderOptions, options);
+        }
+
+        this.m_autoFindDHT = true;
+    }
+
+    // 返回默认dht
     get dht() {
-        return this.m_dht;
+        return this.findDHT(this.m_defaultDHTid);
+    }
+
+    // 获取指定dht
+    findDHT(dhtAppID) {
+        const dhtInfo = this.m_dhtMap.get(dhtAppID);
+        if (dhtInfo) {
+            return dhtInfo.dht;
+        }
+        return undefined;
+    }
+
+    getAllDHT() {
+        let dhts = [];
+        this.m_dhtMap.forEach(dhtInfo => dhts.push(dht));
+        return dhts;
     }
 
     get bdtStack() {
@@ -541,11 +603,29 @@ class P2P extends EventEmitter {
             }
             return [MixSocket.ERROR.success, totalLength];
         } else if ( DHT.Package.CommandType.isValid(cmdType) ) {
-            if (this.m_dht) {
+            if (this.m_dhtMap.size > 0) {
                 if ( totalLength < DHT.Package.HEADER_LENGTH) {
                     return [MixSocket.ERROR.dataCannotParsed, 0];
                 }
-                this.m_dht.process(socket, buffer, remoteAddr, localAddr);
+
+                let dhtDecoder = DHT.PackageFactory.createDecoder(buffer, 0, buffer.length);
+                let pkg = dhtDecoder.decode();
+                if (!pkg) {
+                    return [MixSocket.ERROR.dataCannotParsed, 0];
+                }
+                let dhtInfo = this.m_dhtMap.get(pkg.appid);
+                // 自动发现DHT
+                if (!dhtInfo && this.m_autoFindDHT) {
+                    this._createDHT(pkg.appid, false);
+                    dhtInfo = this.m_dhtMap.get(pkg.appid);
+                    if (this.m_dhtFinderOptions.autoJoin) {
+                        dhtInfo.dht.start(false);
+                    }
+                }
+
+                if (dhtInfo) {
+                    dhtInfo.dht.processPackage(socket, dhtDecoder, remoteAddr, localAddr);
+                }
             }
             return [MixSocket.ERROR.success, totalLength];
         }
@@ -553,8 +633,92 @@ class P2P extends EventEmitter {
         return [MixSocket.ERROR.dataCannotParsed, totalLength];
     }
 
+    _createDHT(dhtAppID, isUser) {
+        let isNew = false;
+        let dhtInfo = this.m_dhtMap.get(dhtAppID);
+        if (!dhtInfo) {
+            isNew = true;
+            let dht = new DHT(this.m_mixSocket, {peerid: this.m_peerid, eplist: this.eplist}, dhtAppID);
+            dht.once(DHT.EVENT.stop, () => {
+                this.m_dhtMap.delete(dhtAppID);
+                this._tryCloseSocket();
+                this.emit(P2P.EVENT.DHTClose, dht);
+            });
+    
+            if (dhtAppID === DHTAPPID.sn) {
+                if (this.m_peerFinder) {
+                    this.m_peerFinder.snDHT = dht;
+                }
+    
+                if (this.m_snService) {
+                    this.m_snService.signinDHT(dht, this.m_snServiceOptions.joinDHTImmediately);
+                }
+            }
+    
+            dhtInfo = {dht, isUser};
+            this.m_dhtMap.set(dhtAppID, dhtInfo);
+
+            this.emit(P2P.EVENT.DHTCreate, dht);
+        }
+
+        if (isUser) {
+            dhtInfo.isUser = true;
+        }
+        return {dht: dhtInfo.dht, isNew};
+    }
+
+    _closeDHT(dht) {
+        if (dht) {
+            const _dhtid = dht.appid;
+            dht.stop();
+            if (_dhtid === DHTAPPID.sn) {
+                if (this.m_peerFinder) {
+                    this.m_peerFinder.snDHT = null;
+                }
+
+                if (this.m_snService) {
+                    this.m_snService.signoutDHT();
+                }
+            }
+
+            if (_dhtid === this.m_defaultDHTid) {
+                if (this.m_peerFinder) {
+                    this.m_peerFinder.dht = null;
+                }
+            }
+        }
+    }
+
+    _clearEmptyDHT() {
+        // 定时检查各DHT路由表信息，清理空的DHT
+        let emptyList = [];
+        this.m_dhtMap.forEach((dhtInfo, dhtAppID) => {
+            if (dhtInfo.isUser) {
+                return;
+            }
+            const peerlist = dhtInfo.dht.getAllOnlinePeers();
+            if (!peerlist ||
+                peerlist.length <= 0 ||
+                (peerlist.length === 1 && peerlist[0].peerid === this.m_peerid)) {
+                    const now = TimeHelper.uptimeMS();
+                    if (!dhtInfo.emptyTime) {
+                        dhtInfo.emptyTime = now;
+                    } else {
+                        if (now - dhtInfo.emptyTime > this.m_dhtOptions.dhtEmptyLimitMS) {
+                            emptyList.push(dhtAppID);
+                        }
+                    }
+                }
+        });
+
+        emptyList.forEach(dhtAppID => {
+            let dht = this.m_dhtMap.get(dhtAppID).dht;
+            dht.stop();
+        });
+    }
+
     _tryCloseSocket() {
-        if (this.m_isClosing && !this.m_bdtStack && !this.m_dht && !this.m_snService) {
+        if (this.m_isClosing && !this.m_bdtStack && this.m_dhtMap.size === 0 && !this.m_snService) {
             if (this.m_mixSocket) {
                 // close socket
                 let socket = this.m_mixSocket;
@@ -574,6 +738,8 @@ P2P.EVENT = {
     BDTStackClose: 'BDTStackClose',
     SNStart: 'SNStart',
     SNStop: 'SNStop',
+    DHTCreate: 'DHTCreate',
+    DHTClose: 'DHTClose',
 };
 
 function debug(options = {}) {

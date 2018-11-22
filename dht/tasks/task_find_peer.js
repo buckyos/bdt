@@ -45,11 +45,12 @@ const LOG_ASSERT = Base.BX_ASSERT;
 const LOG_ERROR = Base.BX_ERROR;
 
 class FindPeerTask extends TouchNodeConvergenceTask {
-    constructor(owner, peerid, isImmediately, findCount) {
+    constructor(owner, peerid, isImmediately, findCount, filter) {
         super(owner, isImmediately);
 
         this.m_peerid = peerid;
         this.m_findCount = findCount;
+        this.m_filter = filter;
 
         this.m_foundPeerList = new Map();
 
@@ -93,12 +94,16 @@ class FindPeerTask extends TouchNodeConvergenceTask {
         return this.m_findCount;
     }
     
+    get filter() {
+        return this.m_filter;
+    }
+
     addStepListener(callback) {
         this.m_stepListeners.push(callback);
     }
 
     _processImpl(response, remotePeer) {
-        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed FindPeer(${this.m_peerid}), peerlist:${(response.body.n_nodes || []).map(p => p.id)}`);
+        LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed FindPeer(${this.m_peerid}), peerlist:${(response.body.n_nodes || []).map(p => p.id)}`);
         this.m_lastResponseTime = TimeHelper.uptimeMS();
         // 合并当前使用的address到eplist，然后恢复response内容
         // 如果address是TCP地址，可能没有记录到eplist，但这个地址可能是唯一可用连接地址
@@ -111,13 +116,19 @@ class FindPeerTask extends TouchNodeConvergenceTask {
         response.common.src.eplist = srcEPList;
 
         // 判定该peer是否在该服务子网
-        let isInService = !foundPeer.inactive;
-        if (isInService) {
+        let isOk = !foundPeer.inactive;
+        if (isOk) {
             let serviceDescriptor = foundPeer.findService(this.servicePath);
-            isInService = serviceDescriptor && serviceDescriptor.isSigninServer();
+            isOk = serviceDescriptor && serviceDescriptor.isSigninServer();
         }
 
-        if (isInService) {
+        if (isOk) {
+            if (this.m_filter && !this.m_foundPeerList.has(response.common.src.peerid)) {
+                isOk = this.m_filter(foundPeer);
+            }
+        }
+
+        if (isOk) {
             this.m_foundPeerList.set(response.common.src.peerid, foundPeer);
             if (this.m_peerid) {
                 if (response.common.src.peerid === this.m_peerid) {
@@ -133,7 +144,19 @@ class FindPeerTask extends TouchNodeConvergenceTask {
     }
 
     _onCompleteImpl(result) {
-        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) FindPeer(${this.m_peerid}) complete:${this.m_foundPeerList.size}`);
+        LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) FindPeer(${this.m_peerid}) complete:${this.m_foundPeerList.size}`);
+
+        if (this.m_findCount && this.m_foundPeerList.size < this.m_findCount) {
+            this.bucket.forEachPeer(peer => {
+                if (this.m_foundPeerList.size < this.m_findCount &&
+                    peer.isOnline(this.bucket.TIMEOUT_MS) &&
+                    !this.m_foundPeerList.has(peer.peerid) &&
+                    (!this.m_filter || this.m_filter(peer))) {
+                    this.m_foundPeerList.set(peer.peerid, peer);
+                }
+            });
+        }
+
         // 有目标peer就按目标peer距离排序，否则按本地节点距离排序
         const peeridSort = this.m_peerid || this.bucket.localPeer.peerid;
         let foundPeerList = [...this.m_foundPeerList.values()];

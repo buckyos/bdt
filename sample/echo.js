@@ -28,7 +28,9 @@
 
 "use strict";
 
-const {P2P} = require('../bdt');
+const {P2P} = require('../index');
+const DHTAPPID = require('../base/dhtappid');
+const SERVICEID = require('../base/serviceid');
 
 class BDTEcho {
     constructor(peerinfo) {
@@ -41,7 +43,11 @@ class BDTEcho {
     }
 
     async start() {
-        let {result, p2p, bdtStack} = await P2P.create4BDTStack(this._makeStackParam());
+        // 这里SN信息直接写入参数中
+        // 如果只知道目标DHT网络中的某些入口节点信息，而没有SN信息，需要先从目标DHT网络中搜索到SN入口信息：
+        // dht.getValue(SERVICEID.sn, 'random', GetValueFlag.UpdateLatest);
+        const param = this._makeStackParam();
+        let {result, p2p, bdtStack} = await P2P.create4BDTStack(param);
         if (result) {
             console.log(`stack start failed:${result}`);
         } else {
@@ -49,6 +55,7 @@ class BDTEcho {
         }
         this.m_bdtStack = bdtStack;
         this.m_p2p = p2p;
+        p2p.joinDHT(param.dhtEntry, {manualActiveLocalPeer: false, dhtAppID: DHTAPPID.none, asDefault: true});
     }
 
     connect(remotePeerid, vport) {

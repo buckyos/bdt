@@ -196,7 +196,7 @@ class DHTPeer {
             let peerInfo = {peerid: nodeInfo.peerid, eplist: nodeInfo.eplist};
             seedList.push(peerInfo);
         }
-        p2p.joinDHT(seedList, false);
+        p2p.joinDHT(seedList);
         this.m_dht = p2p.dht;
         /*
         let sock = dgram.createSocket({type:'udp4', reuseAddr: true});

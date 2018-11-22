@@ -159,6 +159,8 @@ class MixSocket extends EventEmitter {
             return getArgsError([]);
         }
 
+        ipList = [...new Set(ipList)];
+
         // check the local port is in range
         if (port < 0 || port > 65535 || maxPortOffset < 0) {
             return getArgsError();
@@ -227,6 +229,36 @@ class MixSocket extends EventEmitter {
         
     get eplist() {
         return [...this.m_udpListeners.keys(), ...this.m_tcpListeners.keys()];
+    }
+
+    getLastRecvTime(eplist) {
+        let last = 0;
+        eplist.forEach(ep => {
+            const route = this.m_routeTable.get(ep);
+            if (route) {
+                route.connections.forEach(con => {
+                    if (con.lastRecvTime > last) {
+                        last = con.lastRecvTime;
+                    }
+                })
+            }
+        });
+        return last;
+    }
+
+    getLastSendTime(eplist) {
+        let last = 0;
+        eplist.forEach(ep => {
+            const route = this.m_routeTable.get(ep);
+            if (route) {
+                route.connections.forEach(con => {
+                    if (con.lastSendTime > last) {
+                        last = con.lastSendTime;
+                    }
+                })
+            }
+        });
+        return last;
     }
 
     close() {
@@ -328,9 +360,13 @@ class MixSocket extends EventEmitter {
         // 否则，万一不同局域网内多个peer的局域网地址相同，连接成一个后，
         // 因为cache的原因，其他peer也复用该连接，导致其他peer无法到达；
         eplist.forEach(ep => {
-            if (EndPoint.isLoopback(ep) || EndPoint.isZero(ep)) {
+            const addr = EndPoint.toAddress(ep);
+            if (!addr) {
+                return;
+            }
+            if (EndPoint.isLoopback(addr) || EndPoint.isZero(addr)) {
                 localHostList.push(ep);
-            } else if (EndPoint.isNAT(ep)) {
+            } else if (EndPoint.isNAT(addr)) {
                 lanEPList.push(ep);
             } else {
                 internatEPList.push(ep);

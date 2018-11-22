@@ -35,7 +35,6 @@ const DHTPackage = require('./packages/package.js');
 const DHTCommandType = DHTPackage.CommandType;
 const DestributedValueTable = require('./distributed_value_table.js');
 const HandshakeTask = require('./tasks/task_handshake.js');
-const {SendStat} = require('./package_sender.js');
 const assert = require('assert');
 
 const LOG_INFO = Base.BX_INFO;
@@ -62,8 +61,7 @@ class PackageProcessor {
     }
 
     process(cmdPackage, remotePeer, remoteAddr, localAddr) {
-        SendStat.onPackageGot(cmdPackage, remotePeer, remoteAddr, localAddr);
-        this.m_taskExecutor.onPackageGot(cmdPackage, remotePeer, remoteAddr, localAddr);
+        this.m_taskExecutor.onPackageRecved(cmdPackage, remotePeer, remoteAddr, localAddr);
         switch (cmdPackage.cmdType) {
             case DHTCommandType.FIND_PEER_REQ:
                 this._processFindPeer(cmdPackage, remotePeer);
@@ -76,6 +74,8 @@ class PackageProcessor {
                 break;
             case DHTCommandType.PING_REQ:
                 let pingRespPackage = this.m_packageFactory.createPackage(DHTPackage.CommandType.PING_RESP);
+                pingRespPackage.common.packageID = cmdPackage.common.packageID;
+                pingRespPackage.common.ackSeq = cmdPackage.common.seq;
                 this.m_packageSender.sendPackage(remotePeer, pingRespPackage);
                 break;
             case DHTCommandType.PING_RESP: // fallthrough

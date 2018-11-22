@@ -130,7 +130,8 @@ class SplitPackageTask extends Task {
     }
 
     _bodyLimit() {
-        let now = TimeHelper.uptimeMS();
+        const now = TimeHelper.uptimeMS();
+        const localPeer = this.bucket.localPeer;
         if (!this.m_owner.BODY_LIMIT || now - this.m_owner.BODY_LIMIT_CALC_TIME > 600809) {
             let emptyPiecePkg = this.packageFactory.createPackage(DHTCommandType.PACKAGE_PIECE_REQ);
             emptyPiecePkg.body = {
@@ -141,7 +142,7 @@ class SplitPackageTask extends Task {
                 sz: 0,
             }
 
-            let peerStruct = this.bucket.localPeer.toStructForPackage();
+            let peerStruct = localPeer.toStructForPackage();
 
             if (!this.m_peer.hash) {
                 this.m_peer.hash = HashDistance.hash(this.m_peer.peerid);
@@ -161,7 +162,7 @@ class SplitPackageTask extends Task {
             this.m_owner.BODY_LIMIT = DHTPackageFactory.PACKAGE_LIMIT - emptyPiecePkgLength - 4; // 4是sz长度，编码后会把sz设定为分片的真实长度
             this.m_owner.BODY_LIMIT_CALC_TIME = now;
         }
-        return this.m_owner.BODY_LIMIT;
+        return this.m_owner.BODY_LIMIT - localPeer.peerid.length;
     }
 }
 

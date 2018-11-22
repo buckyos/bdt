@@ -32,10 +32,10 @@ const SNDHT = require('../sn/sn_dht.js');
 const BDT = require('../bdt/bdt.js');
 
 class PeerFinder extends BDT.PeerFinder {
-    constructor(snPeer, dht) {
+    constructor(snPeer, snDHT, dht) {
         super();
 
-        this.m_snDHT = null;
+        this.snDHT = snDHT;
         this.snPeer = snPeer;
         this.dht = dht;
     }
@@ -52,13 +52,6 @@ class PeerFinder extends BDT.PeerFinder {
     get dht() {
         return this.m_dht;
     }
-
-    getLocalEPList() {
-        if (this.m_dht) {
-            return this.m_dht.localPeer.eplist;
-        }
-        return [];
-    }
         
     set dht(_dht) {
         this._destroyDHT();
@@ -66,15 +59,36 @@ class PeerFinder extends BDT.PeerFinder {
         this.m_dht = _dht;
 
         if (this.m_dht) {
-            this.m_snDHT = new SNDHT(this.m_dht);
-            this.m_snDHT.signinVistor();
             this.m_dht.once(DHT.EVENT.stop, () => this._destroyDHT());
             setImmediate(() => this.emit(this.EVENT.SNChanged));
         }
     }
 
+    get snDHT() {
+        return this.m_snDHT;
+    }
+
+    set snDHT(_dht) {
+        this._destroySNDHT();
+
+        if (_dht) {
+            this.m_snDHT = new SNDHT(_dht);
+            this.m_snDHT.signinVistor();
+            _dht.once(DHT.EVENT.stop, () => this._destroySNDHT());
+            setImmediate(() => this.emit(this.EVENT.SNChanged));
+        }
+    }
+
+    getLocalEPList() {
+        if (this.m_dht) {
+            return this.m_dht.localPeer.eplist;
+        }
+        return [];
+    }
+
     destory() {
         this._destroyDHT();
+        this._destroySNDHT();
     }
 
     findSN(peerid, fromCache, onStep) {
@@ -106,10 +120,6 @@ class PeerFinder extends BDT.PeerFinder {
         }
     }
 
-    supportFindPeerImmediate() {
-        return !!this.m_dht;
-    }
-
     findPeer(peerid) {
         if (this.m_dht) {
             return new Promise(resolve => {
@@ -122,15 +132,20 @@ class PeerFinder extends BDT.PeerFinder {
                 });
             });
         } else {
-            return Promise.resolve(null);
+            // 表示不支持直接搜索peer
+            return null;
+        }
+    }
+
+    _destroySNDHT() {
+        if (this.m_snDHT) {
+            this.m_snDHT.signoutVistor();
+            this.m_snDHT = null;
         }
     }
 
     _destroyDHT() {
         if (this.m_dht) {
-            this.m_snDHT.signoutVistor();
-            this.m_snDHT = null;
-            this.findPeer = null;
             this.m_dht = null;
         }
     }

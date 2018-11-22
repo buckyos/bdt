@@ -36,6 +36,7 @@ const Peer = require('./peer.js');
 const DHTCommandType = DHTPackage.CommandType;
 const assert = require('assert');
 const BaseUtil = require('../base/util.js');
+const Stat = require('./stat.js');
 const TimeHelper = BaseUtil.TimeHelper;
 
 const LOG_TRACE = Base.BX_TRACE;
@@ -46,14 +47,14 @@ const LOG_CHECK = Base.BX_CHECK;
 const LOG_ASSERT = Base.BX_ASSERT;
 const LOG_ERROR = Base.BX_ERROR;
 
-let g_sendStat = null;
-
 class PackageSender extends EventEmitter {
     constructor(mixSocket, bucket) {
         super();
         this.m_mixSocket = mixSocket;
         this.m_bucket = bucket;
         this.m_taskExecutor = null;
+        this.m_pendingPkgs = new Set(); // <'peerid@seq'>
+        this.m_pendingQueue = []; // {'peerid@seq', time}
     }
     
     get mixSocket() {
@@ -84,16 +85,20 @@ class PackageSender extends EventEmitter {
         let recommandNodes = [];
 
         if (peer instanceof Peer.Peer &&
-            peer.onlineDuration < Config.Peer.recommandNeighborTime &&
             !peer.__noRecommandNeighbor) {
 
-            let closePeerList = this.m_bucket.findClosestPeers(peer.peerid);
-            if (closePeerList && closePeerList.length > 0) {
-                for (let closePeer of closePeerList) {
-                    if (closePeer.isOnline(this.m_bucket.TIMEOUT_MS) &&
-                        closePeer.peerid !== peer.peerid &&
-                        closePeer.peerid !== localPeer.peerid) {
-                        recommandNodes.push({id: closePeer.peerid, eplist: closePeer.eplist});
+            let recommandPeerList = null;
+            if (peer.onlineDuration < (Config.Peer.recommandNeighborTime >>> 2)) {
+                recommandPeerList = this.m_bucket.findClosestPeers(peer.peerid);
+            } else if (peer.onlineDuration < Config.Peer.recommandNeighborTime) {
+                recommandPeerList = this.m_bucket.getRandomPeers();
+            }
+            if (recommandPeerList && recommandPeerList.length > 0) {
+                for (let recommandPeer of recommandPeerList) {
+                    if (recommandPeer.isOnline(this.m_bucket.TIMEOUT_MS) &&
+                        recommandPeer.peerid !== peer.peerid &&
+                        recommandPeer.peerid !== localPeer.peerid) {
+                        recommandNodes.push({id: recommandPeer.peerid, eplist: recommandPeer.eplist});
                     }
                 }
             }
@@ -123,19 +128,38 @@ class PackageSender extends EventEmitter {
 
         LOG_DEBUG(`PEER(${this.m_bucket.localPeer.peerid}) Send package(${DHTCommandType.toString(cmdPackage.cmdType)}) to peer(${peer.peerid})`);
 
+        const pendingKey = this._onPreparePkg(toPeer, cmdPackage);
+
         let options = {
             ignoreCache: ignoreRouteCache,
             socket: null,
-            onPreSend: (pkg, remoteAddr, socket, protocol) => this._onPreSendPackage(pkg, remoteAddr, socket, protocol, peer, recommandNodes),
+            onPreSend: (pkg, remoteAddr, socket, protocol) => this._onPreSendPackage(pkg, remoteAddr, socket, protocol, peer, recommandNodes, {pendingKey, ignoreCache: ignoreRouteCache}),
             dropBusyTCP: true,
             timeout,
         };
         this.m_mixSocket.send(cmdPackage, eplist, options);
     }
 
-    _onPreSendPackage(cmdPackage, remoteAddr, socket, protocol, peer, recommandNodes) {
+    onPackageRecved(cmdPackage, remotePeer, remoteAddr, localAddr) {
+        if (DHTCommandType.isResp(cmdPackage.cmdType)) {
+            const pendingKey = `${remotePeer.peerid}@${cmdPackage.ackSeq}`;
+            this.m_pendingPkgs.delete(pendingKey);
+            // 队列中的内容等溢出阈值被触发时顺序清除
+        }
+    }
+
+    _onPreSendPackage(cmdPackage, remoteAddr, socket, protocol, peer, recommandNodes, options) {
         if (cmdPackage.__isTooLarge) {
             return null;
+        }
+
+        if (!DHTCommandType.isResp(cmdPackage.cmdType)) {
+            // 已经被响应的包不再send
+            // 但是可能因为调用方忽略历史通信记录cache，希望强制对某些地址发包，就不阻止它，对所有地址都发送一个包
+            if (!options.ignoreCache && !this._isPackagePending(options.pendingKey)) {
+                return null;
+            }
+            cmdPackage.common.packageID = Stat.genPackageID();
         }
 
         let now = TimeHelper.uptimeMS();
@@ -143,9 +167,6 @@ class PackageSender extends EventEmitter {
         let peerStruct = localPeer.toStructForPackage();
         
         cmdPackage.fillCommon(peerStruct, peer, recommandNodes);
-        if (!DHTCommandType.isResp(cmdPackage.cmdType)) {
-            cmdPackage.common.packageID = g_sendStat.genPackageID();
-        }
         
         cmdPackage.dest.ep = EndPoint.toString(remoteAddr);
         LOG_DEBUG(`PEER(${this.m_bucket.localPeer.peerid}) Send package(${DHTCommandType.toString(cmdPackage.cmdType)}) to peer(${cmdPackage.dest.peerid}|${peer.peerid}:${EndPoint.toString(remoteAddr)})`);
@@ -162,20 +183,69 @@ class PackageSender extends EventEmitter {
                 peer.__noRecommandNeighbor = true;
             }
             
-            peer.lastSendTime = now;
-            localPeer.lastSendTime = now;
-            if (remoteAddr.protocol === EndPoint.PROTOCOL.udp) {
-                peer.lastSendTimeUDP = now;
-                localPeer.lastSendTimeUDP = now;
+            if (peer !== localPeer) {
+                peer.lastSendTime = now;
+                localPeer.lastSendTime = now;
+                if (remoteAddr.protocol === EndPoint.PROTOCOL.udp) {
+                    peer.lastSendTimeUDP = now;
+                    localPeer.lastSendTimeUDP = now;
+                }
             }
 
-            g_sendStat._onPkgSend(cmdPackage, buffer, peer, remoteAddr);
+            Stat.onPkgSend(cmdPackage, buffer, peer, remoteAddr);
             return buffer;
         } else {
             // split package
             cmdPackage.__isTooLarge = true;
-            this.m_taskExecutor.splitPackage(cmdPackage, peer);
+            setImmediate(() => this.m_taskExecutor.splitPackage(cmdPackage, peer));
             return null;
+        }
+    }
+
+    _onPreparePkg(toPeer, cmdPackage) {
+        if (!DHTCommandType.isResp(cmdPackage.cmdType)) {
+            let pendingKey = `${toPeer.peerid}@${cmdPackage.seq}`;
+            if (this.m_pendingPkgs.has(pendingKey)) {
+                cmdPackage.updateSeq();
+                pendingKey = `${toPeer.peerid}@${cmdPackage.seq}`;
+            }
+
+            const now = TimeHelper.uptimeMS();
+            this.m_pendingPkgs.add(pendingKey);
+
+            const info = {
+                pendingKey,
+                time: now,
+                timeout: Peer.Peer.retryInterval(this.m_bucket.localPeer, toPeer),
+            };
+            this.m_pendingQueue.push(info);
+
+            function isTimeout(info) {
+                return now - info.time > info.timeout;
+            }
+
+            // 集中清理超时pending
+            if (this.m_pendingQueue.length > 89 && isTimeout(this.m_pendingQueue[89])) {
+                let timeoutCount = 0;
+                for (timeoutCount = 0; timeoutCount < this.m_pendingQueue.length; timeoutCount++) {
+                    const info = this.m_pendingQueue[timeoutCount];
+                    if (isTimeout(info)) {
+                        this.m_pendingPkgs.delete(info.pendingKey);
+                    } else {
+                        break;
+                    }
+                }
+                this.m_pendingQueue.splice(0, timeoutCount);
+            }
+            return pendingKey;
+        }
+    }
+
+    _isPackagePending(pendingKey) {
+        if (pendingKey) {
+            return this.m_pendingPkgs.has(pendingKey);
+        } else {
+            return true; // 默认是pending状态，需要再次发送
         }
     }
 }
@@ -292,152 +362,5 @@ class ResendControlor {
     }
 }
 
-class SendStat {
-    constructor(bucket) {
-        assert(!g_sendStat);
-
-        this.m_bucket = bucket;
-
-        this.m_packageID = 0;
-        this.m_packageTracer = []; // [{id, time}]
-        
-        // 记录向各peer发包情况，追踪可达peer的数据包丢失情况
-        this.m_peerTracer = new Map(); // <peerid, [{time, length}]>
-        this.m_traceClearTimer = null;
-
-        this.m_stat = {
-            udp: {
-                pkgs: 0,
-                bytes: 0,
-            },
-            tcp: {
-                pkgs: 0,
-                bytes: 0,
-            },
-            pkgs: new Map(),
-        };
-    }
-    
-    static create(bucket) {
-        if (!g_sendStat) {
-            g_sendStat = new SendStat(bucket);
-        }
-        return g_sendStat;
-    }
-
-    static stat() {
-        return g_sendStat.stat();
-    }
-
-    stat() {
-        return this.m_stat;
-    }
-
-    static onPackageGot(...args) {
-        return g_sendStat.onPackageGot(...args);
-    }
-
-    onPackageGot(cmdPackage, remotePeer, remoteAddr, localAddr) {
-        let now = TimeHelper.uptimeMS();
-
-        if (DHTCommandType.isResp(cmdPackage.cmdType)) {
-            // update RTT
-            let packageID = cmdPackage.common.packageID;
-            if (packageID) {
-                let spliceCount = 0;
-                for (let i = 0; i < this.m_packageTracer.length; i++) {
-                    let tracer = this.m_packageTracer[i];
-                    if (tracer.id === packageID) {
-                        this.m_packageTracer.splice(0, i + 1);
-                        let rtt = now - tracer.time;
-                        remotePeer.updateRTT(rtt);
-                        this.m_bucket.localPeer.updateRTT(rtt);
-                        break;
-                    }
-                }
-            }
-        }
-
-        {
-            // 计数可达peer的发包数
-            if (remoteAddr) {
-                let sendTracer = this.m_peerTracer.get(remotePeer.peerid);
-                if (sendTracer) {
-                    for (let t of sendTracer) {
-                        if (now - t.time < Config.Package.Timeout) {
-                            let stat = this.m_stat.udp;
-                            if (t.protocol === EndPoint.PROTOCOL.tcp) {
-                                stat = this.m_stat.tcp;
-                            }
-                            stat.pkgs++;
-                            stat.bytes += t.length;
-                        }
-                    }
-                    this.m_peerTracer.delete(remotePeer.peerid);
-                }
-            }
-        }
-    }
-    
-    genPackageID() {
-        this.m_packageID++;
-        return this.m_packageID;
-    }
-
-    _onPkgSend(cmdPackage, buffer, remotePeer, remoteAddr) {
-        if (!EndPoint.isNAT(remoteAddr)) {
-            let now = TimeHelper.uptimeMS();
-            let cmdType = cmdPackage.cmdType;
-            if (cmdType === DHTCommandType.PACKAGE_PIECE_REQ) {
-                cmdType = (DHTCommandType.PACKAGE_PIECE_REQ << 16) | cmdPackage.__orignalCmdType;
-            }
-            let count = this.m_stat.pkgs.get(cmdType) || 0;
-            count++;
-            this.m_stat.pkgs.set(cmdType, count);
-
-            if (!DHTCommandType.isResp(cmdPackage.cmdType)) {
-                this.m_packageTracer.push({id: cmdPackage.common.packageID, time: now});
-            }
-
-            // 记录发包时间
-            let sendTracer = this.m_peerTracer.get(remotePeer.peerid);
-            if (!sendTracer) {
-                sendTracer = [{time: now, length: buffer.length, protocol: remoteAddr.protocol}];
-                this.m_peerTracer.set(remotePeer.peerid, sendTracer);
-            } else {
-                sendTracer.push({time: now, length: buffer.length, protocol: remoteAddr.protocol});
-            }
-
-            // 定时清理
-            if (!this.m_traceClearTimer) {
-                this.m_traceClearTimer = setTimeout(() => {
-                    this.m_traceClearTimer = null;
-                    this._clearTimeoutTracer();
-                }, Config.Package.Timeout * 2);
-            }
-        }
-    }
-
-    _clearTimeoutTracer() {
-        // 清理超时记录
-        let now = TimeHelper.uptimeMS();
-        let timeoutPeerids = [];
-        this.m_peerTracer.forEach((t, peerid) => {
-            if (now - t[t.length - 1].time >= Config.Package.Timeout) {
-                timeoutPeerids.push(peerid);
-            } else if (now - t[0].time >= Config.Package.Timeout) {
-                for (let i = 0; i < t.length; i++) {
-                    if (now - t[i].time < Config.Package.Timeout) {
-                        t.splice(0, i);
-                        break;
-                    }
-                }
-            }
-        });
-        timeoutPeerids.forEach(peerid => this.m_peerTracer.delete(peerid));
-    }
-}
-
 module.exports.PackageSender = PackageSender;
 module.exports.ResendControlor = ResendControlor;
-module.exports.SendStat = SendStat;

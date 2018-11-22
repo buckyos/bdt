@@ -76,32 +76,18 @@ class PackageHelper {
     }
 
     createPackage(cmdType) {
-        let cmdPackage = {
-            header: {
-                'magic': BDTPackage.MAGIC,
-                'version': BDTPackage.VERSION,
-                'flags': 0,
-                'cmdType': cmdType,
-                'totalLength': 0,
-                'headerLength': BDTPackage.HEADER_LENGTH,
-                'bodyLength': 0,
-                'src': {
-                    'vport': 0,
-                    'peeridHash': 0,
-                },
-                'dest': {
-                    'vport': 0,
-                    'peeridHash': 0,
-                },
-                'seq': this._genSeq(),
-                'ackSeq': 0,
-                'sessionid': 0,
-            },
-            'body': null,
-            'data': null,
+        let pkg = BDTPackage.createEncoder();
+        pkg.header.cmdType = cmdType;
+        pkg.header.seq = this._genSeq();
+        pkg.header.src = {
+            peeridHash: 0,
+            vport: 0
         };
-        
-        return cmdPackage;
+        pkg.header.dest = {
+            peeridHash: 0,
+            vport: 0
+        };
+        return pkg;
     }
 
     static parsePackage(buffer) {
@@ -190,7 +176,7 @@ class SN extends EventEmitter {
     
     // isSeed标识该SN节点是否作为SN网络中的种子SN，当客户端节点没有任何SN节点信息时可以从DHT网络中得到这类节点
     // 当immediately置true时，立即加入DHT，跨过考核时间，但如果长时间性能不达标也会被下线
-    signinDHT(dht, isSeed, immediately) {
+    signinDHT(dht, immediately) {
         if (!this.m_snDHT) {
             let options = {
                 minOnlineTime2JoinDHT: this.m_options.minOnlineTime2JoinDHT,
@@ -199,7 +185,7 @@ class SN extends EventEmitter {
             };
             this.m_snDHT = new SNDHT(dht, options);
         }
-        this.m_snDHT.signinServer(isSeed, immediately);
+        this.m_snDHT.signinServer(immediately);
     }
 
     signoutDHT() {
@@ -233,12 +219,9 @@ class SN extends EventEmitter {
     }
 
     _sendPackage(socket, cmdPackage, remote, resendPackgeId = null, timeout = 0) {
-        let encoder = BDTPackage.createEncoder(cmdPackage);
-        encoder.m_header = cmdPackage.header;
-        encoder.m_body = cmdPackage.body;
-        encoder.encode();
+        cmdPackage.encode();
         this.m_server.send(
-            encoder.buffer,
+            cmdPackage.buffer,
             [BaseUtil.EndPoint.toString(remote)],
             {
                 ignoreCache: false,
@@ -250,7 +233,7 @@ class SN extends EventEmitter {
 
         // UDP才重试
         if(resendPackgeId && remote.protocol === BaseUtil.EndPoint.PROTOCOL.udp) {
-            this.m_resendQueue.addPackage(resendPackgeId, encoder.buffer, this.m_server, remote, this.m_options.resendInterval, this.m_options.resendTimes, null);
+            this.m_resendQueue.addPackage(resendPackgeId, cmdPackage.buffer, this.m_server, remote, this.m_options.resendInterval, this.m_options.resendTimes, null);
         }
 
         LOG_DEBUG(`[SN]: package ${BDTPackage.CMD_TYPE.toString(cmdPackage.header.cmdType)}(seq = ${cmdPackage.header.seq}) is sendto ${remote.address}: ${remote.port}`);
@@ -260,9 +243,10 @@ class SN extends EventEmitter {
         LOG_DEBUG(`peer(${cmdPackage.body.peerid}:${BaseUtil.EndPoint.toString(remote)}) online.sessionid:${cmdPackage.header.sessionid}`);
         if(cmdPackage.body == null || 
             typeof cmdPackage.body.peerid !== 'string' || cmdPackage.body.peerid.length === 0) {
-            LOG_WARN('[SN]: processPingReq error, body is null');
+            LOG_WARN(`[SN]: processPingReq error, body is null, from:${remote.address}`);
             return Result.FAILED;
         }
+        LOG_DEBUG(`peer(${cmdPackage.body.peerid}:${BaseUtil.EndPoint.toString(remote)}) online.sessionid:${cmdPackage.header.sessionid}`);
     
         let reqBody = cmdPackage.body;
         let reqHeader = cmdPackage.header;
@@ -272,12 +256,8 @@ class SN extends EventEmitter {
         //发送 pingResp
         let pingResp = this.m_packageHelper.createPackage(BDTPackage.CMD_TYPE.pingResp);
         let respHeader = pingResp.header;
-        let respBody = {
-                result: 0,
-                peerid: null,
-                eplist: null,
-            };
-        pingResp.body =  respBody;
+        let respBody = pingResp.body;
+        respBody.result = 0;
         respHeader.sessionid = reqHeader.sessionid;
         respHeader.src.peeridHash = this.m_peeridHash;
         respHeader.dest.peeridHash = reqHeader.src.peeridHash;
@@ -350,16 +330,14 @@ class SN extends EventEmitter {
             let srcEPSet = new Set([...srcPeerEplist, ...callReq.body.eplist]);
             srcPeerEplist = [...srcEPSet];
         }
-        let calledBody = {
-            src: srcPeerid,
-            dest: destPeerid,
-            eplist: Array.from(srcPeerEplist),
-        };
+        let calledBody = calledReq.body;
+        calledBody.src = srcPeerid;
+        calledBody.dest = destPeerid;
+        calledBody.eplist = Array.from(srcPeerEplist);
 
         if (dynamicEPList && dynamicEPList.length > 0) {
             calledBody.dynamics = dynamicEPList;
         }
-        calledReq.body = calledBody;
     
         let resendPackageId = ResendQueue.genPackageID(BDTPackage.CMD_TYPE.calledReq, callReq.header.src.peeridHash, calledHeader.seq);
         this._sendPackage(null, calledReq, destPeerAddress, resendPackageId);
@@ -394,11 +372,10 @@ class SN extends EventEmitter {
         let sendCallResp = (result, eplist, dynamicEPList, lastUpdateTime) => {
             LOG_DEBUG(`[SN]: will send call resp, result:${result}, ${srcPeerid} -> ${destPeerid}`);
     
-            let respBody = {
-                    'src': reqBody.dest,
-                    'dest': reqBody.src,
-                    'result': result,
-                };
+            let respBody = callResp.body;
+            respBody.src = reqBody.dest;
+            respBody.dest = reqBody.src;
+            respBody.result = reqBody.result;
             if (eplist) {
                 respBody.eplist = Array.from(eplist);
                 respBody.time = (lastUpdateTime? now - lastUpdateTime : -1);
@@ -411,7 +388,6 @@ class SN extends EventEmitter {
             if (nearSN && nearSN.peerid !== this.m_peerid && nearSN.eplist && nearSN.eplist.length > 0) {
                 respBody.nearSN = {peerid: nearSN.peerid, eplist: nearSN.eplist};
             }
-            callResp.body = respBody;
             this._sendPackage(socket, callResp, remote);
         };
     
@@ -423,18 +399,16 @@ class SN extends EventEmitter {
             sn2snHeader.dest.peeridHash = BDTPackage.hashPeerid(destPeerInfo.peerid);
             sn2snHeader.sessionid = reqHeader.sessionid;
 
-            let sn2snBody = {
-                    src: {
-                        peeridHash: reqHeader.src.peeridHash,
-                        peerid: srcPeerid,
-                        eplist: Array.from(srcPeerInfo.eplist.keys()),
-                    },
-                    dest: {
-                        peeridHash: reqHeader.dest.peeridHash,
-                        peerid: destPeerid,
-                    }
-                };
-            sn2snReq.body = sn2snBody;
+            let sn2snBody = sn2snReq.body;
+            sn2snBody.src = {
+                peeridHash: reqHeader.src.peeridHash,
+                peerid: srcPeerid,
+                eplist: Array.from(srcPeerInfo.eplist.keys()),
+            };
+            sn2snBody.dest = {
+                peeridHash: reqHeader.dest.peeridHash,
+                peerid: destPeerid,
+            };
 
             let snAddr = {};
             snAddr.address = destPeerInfo.address;

@@ -9,7 +9,8 @@ const {
 } = require('../base/base');
 const P2P = require('../p2p/p2p');
 const path = require('path');
-
+const DHTAPPID = require('../base/dhtappid');
+const SERVICEID = require('../base/serviceid');
 
 
 // 默认参数
@@ -18,6 +19,8 @@ const defaultParams = {
     peerid: 'SN_PEER',
     tcpPort: 10000,
     udpPort: 10010,
+    dhtEntry: '[]',
+    asSeed: false,
     debug: true,
     log_level: 'all',
     log_file_dir: path.resolve('./log'),
@@ -63,8 +66,37 @@ async function start() {
     };
 
     let {result, p2p} = await P2P.create(snDHTServerConfig);
-    await p2p.joinDHT([], true);
-    await p2p.startupSNService(true, {minOnlineTime2JoinDHT: 0});
 
+    // 在发现的所有DHT网络中写入自己的SN信息；
+    // 其他节点可以通过该DHT网络中的任何节点做为入口接入DHT，并在该DHT网络中搜索到SN信息
+    if (params.asSeed) {
+        p2p.on(P2P.EVENT.DHTCreate, dht => {
+            if (dht.appid !== DHTAPPID.sn) {
+                dht.saveValue(SERVICEID.sn, peerid, dht.localPeer.eplist);
+            }
+        });
+    }
+
+    let dhtEntry = JSON.stringify(params.dhtEntry);
+    if (!Array.isArray(dhtEntry)) {
+        dhtEntry = [dhtEntry];
+    }
+    await p2p.joinDHT(dhtEntry, {dhtAppID: DHTAPPID.sn, asDefault: true});
+    await p2p.startupSNService({minOnlineTime2JoinDHT: 0});
+
+    // 聚合DHT入口
+    p2p.startupSuperDHTEntry({autoJoin: true});
+
+    if (params.asSeed) {
+        // 定时更新数据
+        setInterval(() => {
+            p2p.getAllDHT().forEach(dht => {
+                if (dht.appid !== DHTAPPID.sn) {
+                    dht.saveValue(SERVICEID.sn, peerid, dht.localPeer.eplist);
+                }
+            });
+        }, 600000);
+    }
 }
+
 start()

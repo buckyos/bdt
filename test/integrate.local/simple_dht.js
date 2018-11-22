@@ -65,7 +65,7 @@ class DHTPeer {
             return;
         }
 
-        p2p.joinDHT([this.m_peerinfo.seedDHTNode], true);
+        p2p.joinDHT([this.m_peerinfo.seedDHTNode]);
         this.m_dht = p2p.dht;
     }
 

@@ -148,6 +148,9 @@ class BDTStack extends EventEmitter {
             dynamicPortDeadTime: 3600809,
             // 扩展动态端口数量
             dynamicExpand: 3,
+
+            // DEBUG开关
+            debug: false,
         };
         if (options) {
             Object.assign(this.m_options, options);

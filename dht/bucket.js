@@ -78,7 +78,7 @@ class Bucket {
         }
 
         let now = TimeHelper.uptimeMS();
-        if (isReceived) {
+        if (isReceived && peer !== this.m_localPeer) {
             this.m_localPeer.lastRecvTime = now;
             if (peer.address && peer.address.protocol === EndPoint.PROTOCOL.udp) {
                 this.m_localPeer.lastRecvTimeUDP = now;
@@ -305,6 +305,7 @@ class SubBucket {
     }
 
     activePeer(peer, isSent, isReceived, isTrust) {
+        const localPeer = this.m_bucket.localPeer;
         let isNew = false;
         let targetPeer = this.findPeer(peer.peerid);
         if (!targetPeer) {
@@ -329,14 +330,17 @@ class SubBucket {
         }
 
         let now = TimeHelper.uptimeMS();
-        if (isSent) {
-            targetPeer.lastSendTime = now;
-        }
 
-        if (isReceived) {
-            targetPeer.lastRecvTime = now;
-            if (peer.address && peer.address.protocol === EndPoint.PROTOCOL.udp) {
-                targetPeer.lastRecvTimeUDP = now;
+        if (targetPeer !== localPeer) {
+            if (isSent) {
+                targetPeer.lastSendTime = now;
+            }
+    
+            if (isReceived) {
+                targetPeer.lastRecvTime = now;
+                if (peer.address && peer.address.protocol === EndPoint.PROTOCOL.udp) {
+                    targetPeer.lastRecvTimeUDP = now;
+                }
             }
         }
 

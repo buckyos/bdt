@@ -27,19 +27,45 @@
 "use strict";
 
 const Base = require('../base/base.js');
-const {P2P} = require('../bdt');
+const {P2P} = require('../index');
+const DHTAPPID = require('../base/dhtappid');
+const SERVICEID = require('../base/serviceid');
 
 async function main(config) {
     let {result, p2p} = await P2P.create(config);
     if (result !== 0) {
         console.warn(`start sn(P2P.create) failed: result = ${result}`);
     } else {
-        p2p.joinDHT([], true);
-        result = p2p.startupSNService(true, {joinDHTImmediately: true});
+        // 在发现的所有DHT网络中写入自己的SN信息；
+        // 其他节点可以通过该DHT网络中的任何节点做为入口接入DHT，并在该DHT网络中搜索到SN信息
+        if (config.asSeed) {
+            p2p.on(P2P.EVENT.DHTCreate, dht => {
+                if (dht.appid !== DHTAPPID.sn) {
+                    dht.saveValue(SERVICEID.sn, config.peerid, p2p.dht.localPeer.eplist);
+                }
+            });
+        }
+
+        p2p.joinDHT([], {dhtAppID: DHTAPPID.sn, asDefault: true});
+        result = p2p.startupSNService({minOnlineTime2JoinDHT: 0, joinDHTImmediately: true});
         if (result !== 0) {
             console.warn(`start sn(p2p.startupSNService) failed: result = ${result}`);
         }
         console.log(`sn (peerid=${config.peerid}) started at :${JSON.stringify(p2p.eplist)}`);
+
+        // 聚合DHT入口
+        p2p.startupSuperDHTEntry({autoJoin: true});
+
+        // 定时更新数据
+        if (config.asSeed) {
+            setInterval(() => {
+                p2p.getAllDHT().forEach(dht => {
+                    if (dht.appid !== DHTAPPID.sn) {
+                        dht.saveValue(SERVICEID.sn, peerid, dht.localPeer.eplist);
+                    }
+                });
+            }, 600000);
+        }
     }
 }
 
@@ -49,6 +75,7 @@ Base.BX_SetLogLevel(Base.BLOG_LEVEL_OFF);
 let peerid = null;
 let udpPort = null;
 let tcpPort = null;
+let asSeed = false;
 
 function parseParams() {
     let params = process.argv.slice(2);
@@ -67,6 +94,9 @@ function parseParams() {
                 tcpPort = params[index + 1];
                 index += 2;
                 break;
+            case '-asSeed':
+                asSeed = params[index + 1];
+                index += 2;
             default:
                 index += 1;
                 break;
@@ -78,6 +108,7 @@ parseParams();
 
 let CONFIG = {
     peerid,
+    asSeed,
 };
 
 if (tcpPort) {

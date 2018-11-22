@@ -323,6 +323,10 @@ class Peer {
         return this.m_rtt;
     }
 
+    set RTT(rtt) {
+        this.m_rtt = rtt;
+    }
+
     updateRTT(rtt) {
         let alpha = 0.125;
         this.m_rtt = rtt * 0.125 + this.m_rtt * (1 - 0.125);
@@ -548,9 +552,13 @@ class LocalPeer extends Peer {
         return false;
     }
 
-    active() {
-        this.m_isInactive = false;
-        delete this.m_isInactive;
+    active(enable = true) {
+        if (enable) {
+            this.m_isInactive = false;
+            delete this.m_isInactive;
+        } else {
+            this.m_isInactive = true;
+        }
     }
 
     setServiceInfo(servicePath, newValue) {
@@ -722,8 +730,17 @@ class LocalPeer extends Peer {
     get answer() {
         return this.m_answerCount;
     }
+
+    set answer(v) {
+        this.m_answerCount = v;
+    }
+
     get question() {
         return this.m_questionCount;
+    }
+
+    set question(v) {
+        this.m_questionCount = v;
     }
 }
 

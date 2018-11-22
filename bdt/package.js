@@ -28,7 +28,7 @@
 const msgpack = require('msgpack-lite');
 const baseModule = require('../base/base');
 const blog = baseModule.blog;
-const {EndPoint, HashDistance, SequenceU32} = require('../base/util');
+const {EndPoint, HashDistance, SequenceU32, TimeHelper} = require('../base/util');
 const assert = require('assert');
 
 const EMPTY_BUFFER = Buffer.allocUnsafe(0);
@@ -367,6 +367,12 @@ const BDT_ERROR = {
     invalidArgs: 8,
     tooMuchConnection: 9,
     notSupportVersion: 10,
+    connectionBreak: 11,
+    noSNFound: 12,
+    snNotResp: 13,
+    noAddressFromSN: 14,
+    remoteNoSyn: 15,
+    remoteNoHeartbeat: 16,
     toString(err) {
         return Object.keys(BDT_ERROR)
             .filter(key => {
@@ -383,6 +389,8 @@ class BDTPackageSender {
         this.m_remoteEPList = [... new Set(remoteEPList)];
         this.m_isResend = false;
         this.m_activeEP = null;
+        this.m_abort = false;
+        this.m_lastSendTime = 0;
         this.init();
     }
 
@@ -402,6 +410,10 @@ class BDTPackageSender {
         }
 
         let onPreSendInner = (packageBuffer, remoteAddr, socket, protocol) => {
+            if (this.m_abort) {
+                return null;
+            }
+
             let localAddr = null;
             if (protocol === EndPoint.PROTOCOL.udp) {
                 localAddr = socket.address();
@@ -420,6 +432,8 @@ class BDTPackageSender {
             }
             return packageBuffer;
         };
+
+        this.m_lastSendTime = TimeHelper.uptimeMS();
 
         let options = {
             ignoreCache: this.m_isResend,
@@ -445,6 +459,10 @@ class BDTPackageSender {
 
     get remoteEPList() {
         return this.m_remoteEPList;
+    }
+
+    get lastSendTime() {
+        return this.m_lastSendTime;
     }
 
     updateActiveEP(ep) {
@@ -477,6 +495,10 @@ class BDTPackageSender {
 
     set isResend(enable) {
         this.m_isResend = enable;
+    }
+
+    abort() {
+        this.m_abort = true;
     }
 
     equal(other) {

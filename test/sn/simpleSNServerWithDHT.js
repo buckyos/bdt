@@ -67,7 +67,7 @@ async function startSNServer(serverConfigList) {
             continue;
         }
 
-        if (p2p.startupSNService(true) != 0) {
+        if (p2p.startupSNService() != 0) {
             LOG_WARN(`SN service listening failed.`);
             continue;
         }

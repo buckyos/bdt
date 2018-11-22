@@ -28,10 +28,10 @@
 
 const {Config, Result: DHTResult, HashDistance, GetValueFlag} = require('../dht/util.js');
 const EventEmitter = require('events');
+const DHT = require('../dht/dht.js');
 const DHTPeer = require('../dht/peer.js');
 const assert = require('assert');
 const HashConfig = Config.Hash;
-const SN_DHT_SERVICE_ID = '4243153e-8d98-4384-8ae0-0ca1802235e2';
 
 const Base = require('../base/base.js');
 const BaseUtil = require('../base/util.js');
@@ -55,11 +55,10 @@ const SENSIOR_SN_COUNT = 1;
 const DEFAULT_SERVICE_SCOPE = 10;
 
 class SNDHT {
-    constructor(fatherDHT, {minOnlineTime2JoinDHT = 24 * 3600000, recentSNCacheTime = 120000, refreshSNDHTInterval = 600000} = {}) {
-        this.m_fatherDHT = fatherDHT;
-        this.m_snDHT = this.m_fatherDHT.prepareServiceDHT([SN_DHT_SERVICE_ID]);
+    constructor(_dht, {minOnlineTime2JoinDHT = 24 * 3600000, recentSNCacheTime = 120000, refreshSNDHTInterval = 600000} = {}) {
+        this.m_dht = _dht;
 
-        let localPeer = this.m_snDHT.localPeer;
+        let localPeer = this.m_dht.localPeer;
         this.m_localPeer = {
             peerid: localPeer.peerid,
             hash: localPeer.hash,
@@ -76,59 +75,50 @@ class SNDHT {
         this.m_snOnlineListener = null;
         this.m_recentSNMap = new Map(); // 近期上线SN
 
+        this.m_actorFlag = 0;
+
         // <TODO>测试代码
-        this.m_snDHT.__joinedDHTTimes = this.m_snDHT.__joinedDHTTimes || 0;
-        this.m_snDHT.attachBroadcastEventListener(SNDHT.Event.SN.online, (eventName, params, sourcePeer) => {
-            assert(eventName === SNDHT.Event.SN.online && params.peerid === sourcePeer.peerid,
+        this.m_dht.__joinedDHTTimes = this.m_dht.__joinedDHTTimes || 0;
+        this.m_dht.attachBroadcastEventListener(SNDHT.EVENT.SN.online, (eventName, params, sourcePeer) => {
+            assert(eventName === SNDHT.EVENT.SN.online && params.peerid === sourcePeer.peerid,
                 `eventName:${eventName},params:${JSON.stringify(params)},sourcePeer:${JSON.stringify(sourcePeer)}`);
-            assert(this.m_snDHT.__joinedDHTTimes > 0, `sourcePeer:${JSON.stringify(sourcePeer)},localPeer:${JSON.stringify(this.m_fatherDHT.m_bucket.localPeer.toStructForPackage())}`);            
+            assert(this.m_dht.__joinedDHTTimes > 0, `joinTimes: ${this.m_dht.__joinedDHTTimes}, sourcePeer:${JSON.stringify(sourcePeer)},localPeer:${JSON.stringify(this.m_dht.m_bucket.localPeer.toStructForPackage())}`);            
         });
     }
 
+    isRunning() {
+        return (this.m_actorFlag !== 0);
+    }
+
     signinVistor() {
-        let isRunningBefore = this.m_snDHT.isRunning();
-        this.m_snDHT.signinVistor();
+        let isRunningBefore = this.isRunning();
         if (!isRunningBefore) {
             this._onStart();
         }
     }
 
     signoutVistor() {
-        let isRunningBefore = this.m_snDHT.isRunning();
-        this.m_snDHT.signoutVistor();
-        if (isRunningBefore && !this.m_snDHT.isRunning()) {
+        let isRunningBefore = this.isRunning();
+        if (isRunningBefore && !this.isRunning()) {
             this._onStop();
         }
     }
 
-    signinServer(isSeed, immediately) {
-        let isRunningBefore = this.m_snDHT.isRunning();
+    signinServer(immediately) {
+        let isRunningBefore = this.isRunning();
 
-        this._tryJoinService(isSeed, immediately);
+        this._tryJoinService(immediately);
         if (!isRunningBefore) {
             this._onStart();
         }
     }
 
     signoutServer() {
-        let isRunningBefore = this.m_snDHT.isRunning();
-        this.m_snDHT.signoutServer();
-        this.m_fatherDHT.deleteValue(SN_DHT_SERVICE_ID, this.m_localPeer.peerid);
+        let isRunningBefore = this.isRunning();
+        this.m_dht.activeLocalPeer(false);
         this._stopTryJoinService();
-        if (isRunningBefore && !this.m_snDHT.isRunning()) {
+        if (isRunningBefore && !this.isRunning()) {
             this._onStop();
-        }
-    }
-
-    addSN(snPeer) {
-        if (snPeer) {
-            this.m_fatherDHT.saveValue(SN_DHT_SERVICE_ID, snPeer.peerid, snPeer.eplist);
-        }
-    }
-
-    removeSN(snPeerid) {
-        if (snPeerid) {
-            this.m_fatherDHT.deleteValue(SN_DHT_SERVICE_ID, snPeerid);
         }
     }
 
@@ -158,11 +148,11 @@ class SNDHT {
         
     // SN服务端接口
     setServiceScope(maskBitCount) {
-        this.m_snDHT.updateServiceInfo('scope', DEFAULT_SERVICE_SCOPE);
+        this.m_dht.updateLocalPeerAdditionalInfo('scope', DEFAULT_SERVICE_SCOPE);
     }
 
     getServiceScope() {
-        let maskBitCount = this.m_snDHT.getServiceInfo('scope');
+        let maskBitCount = this.m_dht.getLocalPeerAdditionalInfo('scope');
         maskBitCount = maskBitCount || 0;
         return {maskBitCount};
     }
@@ -192,17 +182,17 @@ class SNDHT {
     }
 
     emitBroadcastEvent(eventName, params) {
-        return this.m_snDHT.emitBroadcastEvent(eventName, params);
+        return this.m_dht.emitBroadcastEvent(eventName, params);
     }
 
     // listener(eventName, params, sourcePeer)
     attachBroadcastEventListener(eventName, listener) {
-        return this.m_snDHT.attachBroadcastEventListener(eventName, listener);
+        return this.m_dht.attachBroadcastEventListener(eventName, listener);
     }
 
     // attachBroadcastEventListener相同输入参数
     detachBroadcastEventListener(eventName, listener) {
-        return this.detachBroadcastEventListener(eventName, listener);
+        return this.m_dht.detachBroadcastEventListener(eventName, listener);
     }
 
     getNearSN(peerid, onlyRouteTable) {
@@ -231,7 +221,7 @@ class SNDHT {
         }
 
         let findFromRouteTable = () => {
-            let snList = this._filterNearSNList(this.m_snDHT.getAllOnlinePeers(), peeridHash);
+            let snList = this._filterNearSNList(this.m_dht.getAllOnlinePeers(), peeridHash);
             if (snList && snList.length > 0) {
                 let snHash = (snList[0].hash || HashDistance.hash(snList[0].peerid));
                 let distance2SN = HashDistance.calcDistanceByHash(peeridHash, snHash);
@@ -265,7 +255,6 @@ class SNDHT {
         }
 
         HashDistance.sortByDistance(peerlist, {hash: targetHash, peerid: targetPeerid});
-        let servicePath = this.m_snDHT.servicePath;
         let lastPeer = null;
         for (let peer of peerlist) {
             if (lastPeer && lastPeer.peerid === peer.peerid) {
@@ -275,9 +264,8 @@ class SNDHT {
 
             let maskBitCount = 0;
             if (peer instanceof DHTPeer.Peer) {
-                let serviceDescriptor = peer.findService(servicePath);
-                if (!peer.inactive && serviceDescriptor && serviceDescriptor.isSigninServer()) {
-                    maskBitCount = serviceDescriptor.getServiceInfo([], 'scope') || 0;
+                if (!peer.inactive) {
+                    maskBitCount = peer.getAdditionalInfo('scope') || 0;
                 }
             }
 
@@ -295,7 +283,7 @@ class SNDHT {
 
     _findSN(peerid, forceSearch = false, callback = undefined, onStep = undefined) {
         if (peerid === this.m_localPeer.peerid && !forceSearch) {
-            let snList = this._filterNearSNList(this.m_snDHT.getAllOnlinePeers(), this.m_localPeer.hash);
+            let snList = this._filterNearSNList(this.m_dht.getAllOnlinePeers(), this.m_localPeer.hash);
             if (snList.length >= SN_PEER_COUNT) {
                 callback(DHTResult.SUCCESS, snList);
                 return;
@@ -310,17 +298,17 @@ class SNDHT {
             if (!peerlist) {
                 peerlist = [];
             }
-            peerlist = peerlist.concat(this.m_snDHT.getAllOnlinePeers());
+            peerlist = peerlist.concat(this.m_dht.getAllOnlinePeers());
             let snList = this._filterNearSNList(peerlist, targetHash);
 
             result = snList.length > 0? DHTResult.SUCCESS : DHTResult.FAILED;
             return handle(result, snList);
         }
 
-        this.m_snDHT.findPeer(peerid, generateCallback(callback), generateCallback(onStep));
+        this.m_dht.findPeer(peerid, generateCallback(callback), generateCallback(onStep));
     }
 
-    _tryJoinService(isSeed, immediately) {
+    _tryJoinService(immediately) {
         if (this.m_timerJoinService) {
             return;
         }
@@ -332,16 +320,16 @@ class SNDHT {
         let limitTimes = 5;
         let recentState = [];
         let refreshState = localPeer => {
-            let stat = this.m_fatherDHT.stat().udp;
+            let stat = DHT.stat();
             let nearDistance = this._getNearSNDistance();
 
             // 同范围内有其他SN在线，如果没上线则不上线，但是如果已经上线就维持在线
             let state = {
                 distanceOk: nearDistance === 0 || HashDistance.compareHash(nearDistance, MAX_DISTANCE_SERVICE_PEER) > 0, // 距离范围内没有其他SN
-                sentCount: stat.send.pkgs,
-                recvCount: stat.recv.pkgs,
-                question: stat.req,
-                answer: stat.resp,
+                sentCount: stat.udp.send.pkgs + stat.tcp.send.pkgs,
+                recvCount: stat.udp.recv.pkgs + stat.tcp.recv.pkgs,
+                question: stat.udp.req + stat.tcp.req,
+                answer: stat.udp.resp + stat.tcp.resp,
                 RTT: localPeer.RTT,
             };
 
@@ -354,16 +342,16 @@ class SNDHT {
         // 判定是否满足加入DHT的条件
         let canOnline = state => {
             return  state.distanceOk && // 范围内没有其他SN
-                    state.sentCount && state.recvCount / state.sentCount > 1 && // 收包率
-                    state.answer > 100 && state.question / state.answer > 1 && // QA比
+                    state.sentCount && state.recvCount / state.sentCount > 0.95 && // 收包率
+                    state.answer > 100 && state.question / state.answer > 0.95 && // QA比
                     state.RTT < 100; // 延迟
         }
 
         // 判定是否要退出DHT的SN服务；
         // 判定条件比加入条件宽松，减少上上下下的概率
         let needOffline = state => {
-            return !state.sentCount || state.recvCount / state.sentCount < 0.98 ||
-                    state.answer <= 100 || state.question / state.answer < 0.98 ||
+            return !state.sentCount || state.recvCount / state.sentCount < 0.90 ||
+                    state.answer <= 100 || state.question / state.answer < 0.90 ||
                     state.RTT > 150;
         }
 
@@ -395,13 +383,15 @@ class SNDHT {
         }
 
         let refresh = () => {
-            let localPeer = this.m_fatherDHT.localPeer;
+            let localPeer = this.m_dht.localPeer;
             refreshState(localPeer);
             
             let now = TimeHelper.uptimeMS();
             
-            if (immediately && now - lastOnlineTime < this.MINI_ONLINE_TIME_MS) {
-                this._joinDHT(isSeed);
+            const onlineSNs = this.m_dht.getAllOnlinePeers();
+            if ((immediately && (this.MINI_ONLINE_TIME_MS <= 0 || now - lastOnlineTime < this.MINI_ONLINE_TIME_MS)) // SN预热阶段，立即启动
+                || (onlineSNs.length === 0 || onlineSNs.length === 1 && onlineSNs[0].peerid === this.m_localPeer.peerid)) {  // SN-DHT表中还是空的或者只有自己，立即启动
+                this._joinDHT();
                 return;
             }
 
@@ -416,7 +406,7 @@ class SNDHT {
                     if (limitTimes > 5) {
                         limitTimes -= 0.5;
                     }
-                    this._joinDHT(isSeed);
+                    this._joinDHT();
                 } else if (needUnjoinDHT()) {
                     if (this.m_isJoinedDHT) {
                         limitTimes *= 2;
@@ -436,7 +426,7 @@ class SNDHT {
         }
 
         this.m_timerJoinService = setInterval(refresh, this.REFRESH_SN_DHT_INTERVAL);
-        refresh();
+        // refresh();
     }
 
     _stopTryJoinService() {
@@ -449,33 +439,30 @@ class SNDHT {
     // SN上线；
     // 1.在SN子网中广播上线消息
     // 2.监听其他SN的上线消息，并通知合适的客户端在新SN上线，注意分流，考虑在客户端下次ping的时候随pingResp通知
-    _joinDHT(isSeed) {
+    _joinDHT() {
         if (this.m_isJoinedDHT) {
             return;
         }
 
-        this.m_snDHT.__joinedDHTTimes++;
+        this.m_dht.__joinedDHTTimes++;
         this.m_isJoinedDHT = true;
-        this.m_snDHT.signinServer();
-        //this.m_snDHT.updateServiceInfo('scope', DEFAULT_SERVICE_SCOPE);
-        if (isSeed) {
-            this.m_fatherDHT.saveValue(SN_DHT_SERVICE_ID, this.m_localPeer.peerid, this.m_fatherDHT.localPeer.eplist);
-        }
+        this.m_dht.activeLocalPeer(true, {broadcast: false});
+        //this.m_dht.updateLocalPeerAdditionalInfo('scope', DEFAULT_SERVICE_SCOPE);
         this._onStart();
 
         this.m_snOnlineListener = (eventName, params, sourcePeer) => {
-            assert(eventName === SNDHT.Event.SN.online && params.peerid === sourcePeer.peerid,
+            assert(eventName === SNDHT.EVENT.SN.online && params.peerid === sourcePeer.peerid,
                 `eventName:${eventName},params:${JSON.stringify(params)},sourcePeer:${JSON.stringify(sourcePeer)}`);
             
             if (params.peerid === this.m_localPeer.peerid) {
                 return;
             }
             this.m_recentSNMap.set(params.peerid, {onlineTime: TimeHelper.uptimeMS(), hash: HashDistance.hash(params.peerid)});
-            this.m_fatherDHT.ping(sourcePeer);
-            setImmediate(() => this.m_eventEmitter.emit(SNDHT.Event.SN.online, {peerid: params.peerid}));
+            this.m_dht.ping(sourcePeer);
+            setImmediate(() => this.m_eventEmitter.emit(SNDHT.EVENT.SN.online, {peerid: params.peerid}));
         };
-        this.m_snDHT.attachBroadcastEventListener(SNDHT.Event.SN.online, this.m_snOnlineListener);
-        this.m_snDHT.emitBroadcastEvent(SNDHT.Event.SN.online, {peerid: this.m_localPeer.peerid});
+        this.m_dht.attachBroadcastEventListener(SNDHT.EVENT.SN.online, this.m_snOnlineListener);
+        this.m_dht.emitBroadcastEvent(SNDHT.EVENT.SN.online, {peerid: this.m_localPeer.peerid});
     }
 
     _unjoinDHT() {
@@ -484,11 +471,10 @@ class SNDHT {
         }
 
         this.m_isJoinedDHT = false;
-        this.m_snDHT.signoutServer();
-        this.m_fatherDHT.deleteValue(SN_DHT_SERVICE_ID, this.m_localPeer.peerid);
+        this.m_dht.activeLocalPeer(false);
 
         if (this.m_snOnlineListener) {
-            this.m_snDHT.detachBroadcastEventListener(SNDHT.Event.SN.online, this.m_snOnlineListener);
+            this.m_dht.detachBroadcastEventListener(SNDHT.EVENT.SN.online, this.m_snOnlineListener);
             this.m_snOnlineListener = null;
         }
     }
@@ -504,7 +490,7 @@ class SNDHT {
     }
 
     _getNearSNDistance() {
-        let snList = this._filterNearSNList(this.m_snDHT.getAllOnlinePeers(), this.m_localPeer.hash);
+        let snList = this._filterNearSNList(this.m_dht.getAllOnlinePeers(), this.m_localPeer.hash);
         if (!snList || snList.length === 0) {
             return HashDistance.MAX_HASH;
         }
@@ -514,10 +500,15 @@ class SNDHT {
     }
 }
 
-SNDHT.Event = {
+SNDHT.EVENT = {
     SN: {
         online: 'online', // SN上线
     }
+};
+
+SNDHT.ACTOR_FLAG = {
+    visitor: 0x1,
+    server: 0x1 << 1,
 };
 
 module.exports = SNDHT;

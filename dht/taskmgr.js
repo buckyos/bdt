@@ -62,16 +62,17 @@ class TaskExecutor {
         return this._findPeer(peerid, 0, isImmediately, callback, onStep);
     }
 
-    findRandomPeer(findCount, isImmediately, callback = null, onStep = null) {
-        return this._findPeer(null, findCount, isImmediately, callback, onStep);
+    findRandomPeer(findCount, isImmediately, callback = null, onStep = null, filter = null) {
+        return this._findPeer(null, findCount, isImmediately, callback, onStep, filter);
     }
 
-    _findPeer(peerid, findCount, isImmediately, callback = null, onStep = null) {
+    _findPeer(peerid, findCount, isImmediately, callback = null, onStep = null, filter = null) {
         for (let [taskid, task] of this.m_taskMgr.m_taskMap) {
             if (task.type === 'FindPeerTask'
                 && ((task.peerid && task.peerid === peerid) || (!task.peerid && task.findCount === findCount))
                 && task.servicePath == this.m_servicePath
-                && !task.isComplete) {
+                && !task.isComplete
+                && filter === task.filter) {
                     // onStep不可忽略空
                     task.addStepListener(onStep);
                     if (callback) {
@@ -81,7 +82,7 @@ class TaskExecutor {
             }
         }
 
-        let newTask = new FindPeerTask(this, peerid, isImmediately, findCount);
+        let newTask = new FindPeerTask(this, peerid, isImmediately, findCount, filter);
         newTask.addStepListener(onStep);
         if (callback) {
             newTask.addCallback(callback);
@@ -200,8 +201,13 @@ class TaskExecutor {
 
     // 协助握手
     handshakeAgency(srcPeer, targetPeer, taskid) {
-        if (this.m_taskMgr.m_taskMap.get(taskid)) {
-            return;
+        // 按peerid去重，不要按taskid去重，否则，可能被恶意节点请求大批量节点对特定节点发送穿透请求进行DDOS攻击
+        for (let [taskid, task] of this.m_taskMgr.m_taskMap) {
+            if (task.type === 'HandshakeAgencyTask'
+                && task.srcPeerid === srcPeer.peerid
+                && task.targetPeerid === targetPeer.peerid) {
+                    return;
+            }
         }
 
         let newTask = new HandshakeTask.Agency(this, srcPeer, targetPeer, taskid);
@@ -210,8 +216,12 @@ class TaskExecutor {
 
     // 被动握手
     handshakeTarget(srcPeer, taskid) {
-        if (this.m_taskMgr.m_taskMap.get(taskid)) {
-            return;
+        // 按peerid去重，不要按taskid去重，否则，可能被恶意节点请求大批量节点对特定节点发送穿透请求进行DDOS攻击
+        for (let [taskid, task] of this.m_taskMgr.m_taskMap) {
+            if (task.type === 'HandshakeTargetTask'
+                && task.peerid === srcPeer.peerid) {
+                    return;
+            }
         }
 
         let newTask = new HandshakeTask.Target(this, srcPeer, taskid);
@@ -226,7 +236,7 @@ class TaskExecutor {
         this.m_taskMgr._run(newTask);
     }
 
-    onPackageGot(cmdPackage, remotePeer, remoteAddr, localAddr) {
+    onPackageRecved(cmdPackage, remotePeer, remoteAddr, localAddr) {
         let tasklist = this.m_handshakeTaskMap.get(remotePeer.peerid);
         if (tasklist) {
             tasklist.forEach(task => task.onRemoteResponse(cmdPackage, remotePeer, remoteAddr, localAddr));
@@ -276,7 +286,7 @@ class TaskExecutor {
 
 class TaskMgr {
     constructor() {
-        this.m_idGen = new SequenceIncreaseGenerator(TaskConfig.MinTaskID, TaskConfig.MaxTaskID);
+        this.m_idGen = new SequenceIncreaseGenerator();
         this.m_taskMap = new Map();
         this.m_completeTaskIDList = [];
     }

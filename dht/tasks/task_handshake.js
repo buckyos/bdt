@@ -293,7 +293,8 @@ class HandshakeAgencyTask extends Task {
 
 class HandshakeTargetTask extends Task {
     constructor(owner, srcPeer, taskid) {
-        super(owner, {timeout: HandshakeConfig.TimeoutMS, maxIdleTime: TaskConfig.MaxIdleTimeMS});
+        // 这里timeout时间更长一点，避免被人恶意发送反连穿透请求对某特定节点进行DDOS攻击
+        super(owner, {timeout: TaskConfig.TimeoutMS, maxIdleTime: TaskConfig.MaxIdleTimeMS});
 
         this.m_id = taskid;
         this.m_handshakeResender = null;

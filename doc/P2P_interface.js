@@ -95,8 +95,7 @@ class P2P extends EventEmitter {
 
     // 如果要通过dht网络检索peer，要调用joinDHT加入dht网络
     // dhtEntryPeers: [{peerid: xxx, eplist:[4@ip@port]}]
-    // asSeedSNInDHT: 如果启动了SN服务，标识是否要作为种子SN写入DHT网络
-    joinDHT(dhtEntryPeers, asSeedSNInDHT);
+    joinDHT(dhtEntryPeers);
 
     // 退出DHT网络，如果没有设定固定SN，将无法连接到任何peer
     disjoinDHT();
@@ -110,7 +109,7 @@ class P2P extends EventEmitter {
     startupBDTStack(options, callback = null);
 
     // 启动SN服务
-    startupSNService(asSeedSNInDHT);
+    startupSNService();
 
     // 如果没有加入DHT网络，将返回null
     // 如果加入了DHT网络，将返回代表该DHT网络的对象，通过它，你能实现以下功能：
@@ -212,8 +211,14 @@ class DHT extends EventEmitter {
     // 获取本地路由表中所有在线peer列表
     getAllOnlinePeers();
 
-    // 从本地路由表中获取指定数量的随机peer
-    getRandomPeers(count);
+    // @param  <number> count 期望找多少个peer
+    // @param  <boolean> fromLocal 是否只从本地路由表中搜索
+    // @param  <function> callback({dht, result, peerlist}) 完成回调
+    // @param  <object> options: {
+    //    <function> onStep({dht, result, peerlist}), 定时返回已经搜索到的全部peer列表，搜索完成时间可能比较长，部分要求及时响应的需求可以处理该事件，返回true停止搜索
+    //    <function> filter(peer)，过滤搜索到的节点，返回true表示该peer有效
+    // }
+    getRandomPeers(count, fromLocal, callback, options);
 }
 
 // DHT发生事件列表

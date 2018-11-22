@@ -1,3 +1,4 @@
+
 // Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
 // The BDT project is supported by the GeekChain Foundation.
 // All rights reserved.
@@ -26,17 +27,18 @@
 
 'use strict';
 
-// 这是本项目的引用入口
-// P2P是整个项目各模块的整合层，强烈建议从此引用本项目，因此P2P模块也是本项目的实际引用入口；
-// 高级开发者如果想要单独引用其中部分模块进行定制，可参考P2P模块自行引用，或者联系开发者导出子模块；
-const P2P = require('./p2p/p2p');
-const Util = require('./base/util');
-const DHTAPPID = require('./base/dhtappid');
-const SERVICEID = require('./base/serviceid');
+/**
+ * 每种应用的DHT网络定义一个ID，不同DHT网络之间不能相互通信；
+ * 如果想要实现一个独立的DHT网络，需要在这里申请一个ID
+ */
+const DHTAPPID = {
+    none: 0, // 未指定的appid，可用于测试
+    sn: 1, // 用于穿透的SN服务器
+    
+    userBase: 160809,
 
-module.exports = {
-    P2P,
-    Util,
-    DHTAPPID,
-    SERVICEID,
+    blockchainBase: 160810, // 区块链应用ID分配段
+    bcINT: 160811, // INT链
 };
+
+module.exports = DHTAPPID;

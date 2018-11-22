@@ -125,16 +125,17 @@ class RouteTable {
         }
 
         // 近期离线
-        let isOfflineRecently = (peer) => {
+        const isOfflineRecently = (peer) => {
             return !peer.isOnline(this.m_bucket.TIMEOUT_MS) // 不在线
-                && now - peer.lastRecvTime < this.m_bucket.TIMEOUT_MS + RouteTableConfig.PingIntervalMS.Retry * 3;
+                && now - getLastTransTime(peer).recv.all < this.m_bucket.TIMEOUT_MS + RouteTableConfig.PingIntervalMS.Retry * 3;
         }
 
-        let shoudRetry = (peer, bucketDistRank) => {
+        const shoudRetry = (peer, bucketDistRank) => {
             let pingInterval = pingInterval4NATType || RouteTableConfig.PingIntervalMS.dynamic(bucketDistRank);
             // 在一个ping周期略长的时间内没有收到包，很可能是ping包丢失；
             // 近期离线的也应该retry，可能还能救回
-            return (now - peer.lastRecvTime >= pingInterval && now - peer.lastRecvTime < pingInterval + RouteTableConfig.PingIntervalMS.Retry * 3) ||
+            const lastRecvTime = getLastTransTime(peer).recv.all;
+            return (now - lastRecvTime >= pingInterval && now - lastRecvTime < pingInterval + RouteTableConfig.PingIntervalMS.Retry * 3) ||
                 isOfflineRecently(peer);
         }
 
@@ -144,21 +145,67 @@ class RouteTable {
             recentRecvTime: 0,
         };
 
-        let ping = (peer) => {
+        const ping = (peer) => {
             if (!pingPackage) {
                 pingPackage = this.m_packageFactory.createPackage(DHTPackage.CommandType.PING_REQ);
             }
+
+            const lastTransTime = getLastTransTime(peer);
+            
             // 太长时间没有收到UDP包，也没有发出UDP包，忽略之前发送路由缓存，对该peer所有地址发送一遍
-            let ignoreCache = (now - localPeer.lastRecvTimeUDP >= RouteTableConfig.PingIntervalMS.Retry &&
+            let ignoreCache = (now - localPeer.lastRecvTimeUDP >= RouteTableConfig.PingIntervalMS.Min &&
                                 now - localPeer.lastSendTimeUDP >= RouteTableConfig.PingIntervalMS.Retry) || 
-                            (now - peer.lastRecvTimeUDP >= RouteTableConfig.PingIntervalMS.Max &&
-                                now - peer.lastSendTimeUDP >= RouteTableConfig.PingIntervalMS.Retry);
+                            (now - lastTransTime.recv.udp >= RouteTableConfig.PingIntervalMS.Max &&
+                                now - lastTransTime.send.udp >= RouteTableConfig.PingIntervalMS.Retry);
             this.m_packageSender.sendPackage(peer, pingPackage, ignoreCache, RouteTableConfig.PingIntervalMS.Retry);
             pingCount++;
         }
 
+        // 启动多个DHT栈的情况下，同一个PEER可能加入多个DHT网络，ping的频率应该共享
+        const getLastTransTime = peer => {
+            if (peer.__transFrequnence && now - peer.__transFrequnence.updateTime < 5000) {
+                return peer.__transFrequnence;
+            }
+
+            let udpEPList = [];
+            let tcpEPList = [];
+            peer.eplist.forEach(ep => {
+                const addr = EndPoint.toAddress(ep);
+                if (!EndPoint.isNAT(addr)) {
+                    if (addr.protocol === EndPoint.PROTOCOL.tcp) {
+                        tcpEPList.push(ep);
+                    } else {
+                        udpEPList.push(ep);
+                    }
+                }
+            });
+
+            const lastRecvTime = {
+                udp: this.m_packageSender.mixSocket.getLastRecvTime(udpEPList),
+                tcp: this.m_packageSender.mixSocket.getLastRecvTime(tcpEPList),
+            };
+            const lastSendTime = {
+                udp: this.m_packageSender.mixSocket.getLastSendTime(udpEPList),
+                tcp: this.m_packageSender.mixSocket.getLastSendTime(tcpEPList),
+            };
+
+            peer.__transFrequnence = {
+                recv: {
+                    udp: Math.max(peer.lastRecvTimeUDP, lastRecvTime.udp),
+                    all: Math.max(peer.lastRecvTime, lastRecvTime.udp, lastRecvTime.tcp),
+                },
+                send: {
+                    udp: Math.max(peer.lastSendTimeUDP, lastSendTime.udp),
+                    all: Math.max(peer.lastSendTime, lastSendTime.udp, lastSendTime.tcp),
+                },
+
+                updateTime: now,
+            };
+            return peer.__transFrequnence;
+        }
+
         this.m_bucket.forEachPeer(peer => {
-            if (pingCount >= maxPingCount) {
+            if (pingCount >= maxPingCount || peer === localPeer) {
                 return;
             }
 
@@ -169,31 +216,29 @@ class RouteTable {
                 assert(!this.m_bucket.findPeer(peer.peerid));
                 return;
             }
+
+            const lastTransTime = getLastTransTime(peer);
             if (subBucket.distRank != lastRank.rank) {
-                let pingInterval = (pingInterval4NATType || RouteTableConfig.PingIntervalMS.Min);
+                const pingInterval = (pingInterval4NATType || RouteTableConfig.PingIntervalMS.Min);
                 if (lastRank.recentRecvPeer &&
                     now - lastRank.recentRecvTime > pingInterval &&
-                    now - lastRank.recentRecvPeer.lastSendTime > pingInterval) {
+                    now - getLastTransTime(lastRank.recentRecvPeer).send.all > pingInterval) {
                     ping(lastRank.recentRecvPeer);
                 }
                 lastRank.rank = subBucket.distRank;
                 lastRank.recentRecvPeer = peer;
-                lastRank.recentRecvTime = peer.lastRecvTime;
-            } else if (peer.lastRecvTime > lastRank.recentRecvTime) {
-                lastRank.recentRecvTime = peer.lastRecvTime;
+                lastRank.recentRecvTime = lastTransTime.recv.all;
+            } else if (lastTransTime.recv.all > lastRank.recentRecvTime) {
+                lastRank.recentRecvTime = lastTransTime.recv.all;
                 lastRank.recentRecvPeer = peer;
             }
 
-            let pingInterval = pingInterval4NATType || RouteTableConfig.PingIntervalMS.dynamic(subBucket.distRank);
-            if (now - peer.lastSendTime >= pingInterval ||
-                (shoudRetry(peer, subBucket.distRank) && now - peer.lastSendTime >= RouteTableConfig.PingIntervalMS.Retry)) {
+            const pingInterval = pingInterval4NATType || RouteTableConfig.PingIntervalMS.dynamic(subBucket.distRank);
+            if (now - lastTransTime.send.all >= pingInterval ||
+                (shoudRetry(peer, subBucket.distRank) && now - lastTransTime.send.all >= RouteTableConfig.PingIntervalMS.Retry)) {
 
-                if (now - peer.lastSendTime > RouteTableConfig.PingIntervalMS.Max) {
-                    // LOG_WARN(`Ping stopped. ${this.m_bucket.localPeer.peerid}=>${peer.peerid}, last send package time:${new Date(peer.lastSendTime).toDateString()}`);
-                }
                 if (!peer.isOnline(this.m_bucket.TIMEOUT_MS)) {
                     peer.address = null;
-                    // LOG_WARN(`Ping stopped. ${this.m_bucket.localPeer.peerid}=>${peer.peerid}, last send package time:${new Date(peer.lastSendTime).toDateString()}`);
                 }
                 ping(peer);
 
