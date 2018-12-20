@@ -281,7 +281,7 @@ class SNDHT {
         return {normal: normalSNList, sensior: sensiorSNList};
     }
 
-    _findSN(peerid, forceSearch = false, callback = undefined, onStep = undefined) {
+    _findSN(peerid, forceSearch = false, onStep = undefined, callback = undefined) {
         if (peerid === this.m_localPeer.peerid && !forceSearch) {
             let snList = this._filterNearSNList(this.m_dht.getAllOnlinePeers(), this.m_localPeer.hash);
             if (snList.length >= SN_PEER_COUNT) {
@@ -305,7 +305,7 @@ class SNDHT {
             return handle(result, snList);
         }
 
-        this.m_dht.findPeer(peerid, generateCallback(callback), generateCallback(onStep));
+        this.m_dht.findPeer(peerid, {onStep: generateCallback(onStep)}, generateCallback(callback));
     }
 
     _tryJoinService(immediately) {

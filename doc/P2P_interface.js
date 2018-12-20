@@ -175,9 +175,11 @@ class DHT extends EventEmitter {
     // 本地peer信息
     get localPeer();
 
-    // callback({result, peerlist})
     // 查询跟指定peerid相似的peer信息，可能会返回多个peer，如果查到peerid跟指定peerid完全相同的peer，将会在peerlist[0]返回
-    findPeer(peerid, callback);
+    // callback({result, peerlist})
+    // options: 
+    //      onStep({dht, result, peerlist}): 阶段性返回找到的peer，部分应用更需要响应的及时性，返回true将中断本次搜索，callback返回result=ABORT(7)
+    findPeer(peerid, options, callback);
 
     // 向指定表(tableName)的指定键值(keyName)写入数据(value);
     // 写入后会定时向peerid和tableName最相似的几个peer推送该value，其他peer不一定能立即访问到；
@@ -218,7 +220,7 @@ class DHT extends EventEmitter {
     //    <function> onStep({dht, result, peerlist}), 定时返回已经搜索到的全部peer列表，搜索完成时间可能比较长，部分要求及时响应的需求可以处理该事件，返回true停止搜索
     //    <function> filter(peer)，过滤搜索到的节点，返回true表示该peer有效
     // }
-    getRandomPeers(count, fromLocal, callback, options);
+    getRandomPeers(count, fromLocal, options, callback);
 }
 
 // DHT发生事件列表

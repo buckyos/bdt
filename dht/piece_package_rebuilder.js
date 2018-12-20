@@ -134,7 +134,7 @@ class PackageRebuildingTask {
 
         let pieceNo = piecePkg.body.no;
         LOG_ASSERT(piecePkg.body.max + 1 === this.m_piecePkgs.length,
-            `Splite package max-no conflict: (max:${piecePkg.body.max}, pieceCount:(${this.m_piecePkgs.length}))`);
+            `[DHT(${piecePkg.appid})] Splite package max-no conflict: (max:${piecePkg.body.max}, pieceCount:(${this.m_piecePkgs.length}))`);
         if (!this.m_piecePkgs[pieceNo]) {
             this.m_piecePkgs[pieceNo] = piecePkg;
             this.m_gotPieceCount++;

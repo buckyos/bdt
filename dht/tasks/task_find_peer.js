@@ -144,7 +144,7 @@ class FindPeerTask extends TouchNodeConvergenceTask {
     }
 
     _onCompleteImpl(result) {
-        LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) FindPeer(${this.m_peerid}) complete:${this.m_foundPeerList.size}`);
+        LOG_INFO(`[DHT(${this.packageFactory.appid})] LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) FindPeer(${this.m_peerid}) complete:${this.m_foundPeerList.size}`);
 
         if (this.m_findCount && this.m_foundPeerList.size < this.m_findCount) {
             this.bucket.forEachPeer(peer => {

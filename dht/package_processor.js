@@ -98,7 +98,7 @@ class PackageProcessor {
                 this._processBroadCastEvent(cmdPackage, remotePeer);
                 break;
             case DHTCommandType.PACKAGE_PIECE_REQ:
-                LOG_ASSERT(false, `should not reach here. DHTCommandType.PACKAGE_PIECE_REQ`);
+                LOG_ASSERT(false, `[DHT${this.m_packageFactory.appid}] should not reach here. DHTCommandType.PACKAGE_PIECE_REQ`);
                 break;
             case DHTCommandType.COMBINE_PACKAGE:
                 // <TODO> 支持向同一个peer发送的多个包打包发送，节省带宽
@@ -121,7 +121,7 @@ class PackageProcessor {
                 break;
             }
             default:
-                LOG_ASSERT(false, `Unknown package received:${DHTCommandType.toString(cmdPackage.cmdType)}`);
+                LOG_ASSERT(false, `[DHT${this.m_packageFactory.appid}] Unknown package received:${DHTCommandType.toString(cmdPackage.cmdType)}`);
         }
     }
 
@@ -131,7 +131,7 @@ class PackageProcessor {
 
     // findPeer不支持TTL，因为找到的目标节点要保证可达，而经过跳转找到的peer对本地来讲，未必可达
     _processFindPeer(cmdPackage, remotePeer) {
-        LOG_DEBUG(`LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got findpeer command(${cmdPackage.body.target}) from peer(${cmdPackage.common.src.peerid})`);
+        LOG_DEBUG(`[DHT${this.m_packageFactory.appid}] LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got findpeer command(${cmdPackage.body.target}) from peer(${cmdPackage.common.src.peerid})`);
         if (cmdPackage.body.target && typeof cmdPackage.body.target !== 'string') {
             return;
         }
@@ -143,7 +143,7 @@ class PackageProcessor {
     }
 
     _processUpdateValue(cmdPackage, remotePeer) {
-        LOG_DEBUG(`LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got updatevalue command(${cmdPackage.body.tableName}:${cmdPackage.body.key}) from peer(${cmdPackage.common.src.peerid})`);
+        LOG_DEBUG(`[DHT${this.m_packageFactory.appid}] LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got updatevalue command(${cmdPackage.body.tableName}:${cmdPackage.body.key}) from peer(${cmdPackage.common.src.peerid})`);
 
         let {tableName, values} = cmdPackage.body;
         if (typeof tableName === 'string' && tableName.length > 0) {
@@ -174,7 +174,7 @@ class PackageProcessor {
         }
 
         let {tableName, key, flags} = cmdPackage.body;
-        LOG_DEBUG(`LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got findvalue command(${tableName}:${key}:${flags}) from peer(${cmdPackage.common.src.peerid})`);
+        LOG_DEBUG(`[DHT${this.m_packageFactory.appid}] LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got findvalue command(${tableName}:${key}:${flags}) from peer(${cmdPackage.common.src.peerid})`);
 
         if (typeof tableName !== 'string' || tableName.length === 0 ||
             typeof key !== 'string' || key.length === 0) {
@@ -218,7 +218,7 @@ class PackageProcessor {
 
     _processBroadCastEvent(cmdPackage, remotePeer) {
         let {event, params, source} = cmdPackage.body;
-        LOG_DEBUG(`LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got broadcast event(${event}:${params}) from peer(${source})`);
+        LOG_DEBUG(`[DHT${this.m_packageFactory.appid}] LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got broadcast event(${event}:${params}) from peer(${source})`);
 
         if (typeof event !== 'string' || event.length === 0 ||
             !source || typeof source.peerid !== 'string' || source.peerid.length === 0) {
@@ -285,7 +285,7 @@ class PackageProcessor {
         if (!cmdPackage.body.target || typeof cmdPackage.body.target.peerid !== 'string' || cmdPackage.body.target.peerid.length === 0) {
             return;
         }
-        LOG_DEBUG(`LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got hole call(to:${cmdPackage.body.target.peerid}) from peer(${cmdPackage.src.peerid})`);
+        LOG_DEBUG(`[DHT${this.m_packageFactory.appid}] LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got hole call(to:${cmdPackage.body.target.peerid}) from peer(${cmdPackage.src.peerid})`);
 
         let targetPeerInfo = {peerid: cmdPackage.body.target.peerid, eplist: []};
 
@@ -322,7 +322,7 @@ class PackageProcessor {
         if (!cmdPackage.body.src || typeof cmdPackage.body.src.peerid !== 'string' || cmdPackage.body.src.peerid.length === 0) {
             return;
         }
-        LOG_DEBUG(`LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got hole called(from:${cmdPackage.body.src.peerid}) from peer(${cmdPackage.src.peerid})`);
+        LOG_DEBUG(`[DHT${this.m_packageFactory.appid}] LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got hole called(from:${cmdPackage.body.src.peerid}) from peer(${cmdPackage.src.peerid})`);
 
         let srcEPList = cmdPackage.body.src.eplist || [];
         let srcPeer = this.m_bucket.findPeer(cmdPackage.body.src.peerid);
@@ -343,7 +343,7 @@ class PackageProcessor {
     }
 
     _processHandshake(cmdPackage, remotePeer) {
-        LOG_DEBUG(`LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got handshake from peer(${cmdPackage.src.peerid})`);
+        LOG_DEBUG(`[DHT${this.m_packageFactory.appid}] LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got handshake from peer(${cmdPackage.src.peerid})`);
         let respPackage = this.m_packageFactory.createPackage(DHTCommandType.HANDSHAKE_RESP);
         respPackage.common.packageID = cmdPackage.common.packageID;
         respPackage.common.ackSeq = cmdPackage.common.seq;

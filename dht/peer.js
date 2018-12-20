@@ -198,9 +198,9 @@ class Peer {
         });
 /*
         {
-            LOG_DEBUG(`_servicesStruct(${this.peerid}) actived, service list:`);
+            LOG_DEBUG(`[DHT] _servicesStruct(${this.peerid}) actived, service list:`);
             if (obj.services)
-                obj.services.forEach((subSrv) => LOG_DEBUG(`ServiceID:${subSrv.id}, flags:${subSrv.flags}`));
+                obj.services.forEach((subSrv) => LOG_DEBUG(`[DHT] ServiceID:${subSrv.id}, flags:${subSrv.flags}`));
         }
 */
         return obj;
@@ -637,17 +637,17 @@ class LocalPeer extends Peer {
         }
 
         if (this.isSymmetricNAT) {
-            // LOG_DEBUG(`isSymmetricNAT:eplist.size=${this.m_eplist.size},initEPCount=${this.m_initEPCount},conjectureEPCount=${this.m_conjectureEPCount},internetEPCount:${this.m_discoverInternetEPCount}`);
+            // LOG_DEBUG(`[DHT] isSymmetricNAT:eplist.size=${this.m_eplist.size},initEPCount=${this.m_initEPCount},conjectureEPCount=${this.m_conjectureEPCount},internetEPCount:${this.m_discoverInternetEPCount}`);
             return NAT_TYPE.symmetricNAT;
         } else if (this.m_answerCount < 100 || this.m_questionCount / this.m_answerCount < 1) {
-            // LOG_DEBUG(`restrictedNAT:this.m_answerCount=${this.m_answerCount},this.m_questionCount=${this.m_questionCount}`);
+            // LOG_DEBUG(`[DHT] restrictedNAT:this.m_answerCount=${this.m_answerCount},this.m_questionCount=${this.m_questionCount}`);
             return NAT_TYPE.restrictedNAT;
         } else {
             // 其他peer看到的地址都和发包采用地址相同，认为它有一个公网地址
             if (this.m_eplist) {
                 let now = TimeHelper.uptimeMS();
                 for (let [ep, epInfo] of this.m_eplist) {
-                    // LOG_DEBUG(`now=${now},ep=${ep},epInfo=${JSON.stringify(epInfo)}`);
+                    // LOG_DEBUG(`[DHT] now=${now},ep=${ep},epInfo=${JSON.stringify(epInfo)}`);
                     let epAddress = EndPoint.toAddress(ep);
                     if (epAddress &&
                         epInfo.senderEP && 

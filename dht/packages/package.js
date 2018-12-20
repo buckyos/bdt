@@ -206,18 +206,18 @@ class DHTPackage {
 
     checkCommon() {
         LOG_ASSERT(this.m_common.src.hash && typeof this.m_common.src.hash === 'number',
-            `Package(${CommandType.toString(this.m_common.cmdType)}) field(src.hash:number) not filled.`);
+            `[DHT(${this.m_common.appid})] Package(${CommandType.toString(this.m_common.cmdType)}) field(src.hash:number) not filled.`);
         LOG_ASSERT(this.m_common.dest.hash && typeof this.m_common.dest.hash === 'number',
-            `Package(${CommandType.toString(this.m_common.cmdType)}) field(dest.hash:number) not filled.`);
+            `[DHT(${this.m_common.appid})] Package(${CommandType.toString(this.m_common.cmdType)}) field(dest.hash:number) not filled.`);
             
         if (this.m_common.cmdType !== CommandType.PACKAGE_PIECE_REQ) {
             LOG_ASSERT(this.m_common.src.peerid && typeof this.m_common.src.peerid === 'string',
-                `Package(${CommandType.toString(this.m_common.cmdType)}) field(src.peerid:string) not filled.`);
+                `[DHT(${this.m_common.appid})] Package(${CommandType.toString(this.m_common.cmdType)}) field(src.peerid:string) not filled.`);
             LOG_ASSERT(this.m_common.dest.peerid && typeof this.m_common.dest.peerid === 'string',
-                `Package(${CommandType.toString(this.m_common.cmdType)}) field(dest.peerid:string) not filled.`);
+                `[DHT(${this.m_common.appid})] Package(${CommandType.toString(this.m_common.cmdType)}) field(dest.peerid:string) not filled.`);
             if (CommandType.isResp(this.m_common.cmdType)) {
                 LOG_ASSERT(typeof this.m_common.ackSeq === 'number' && this.m_common.ackSeq >= 0 && this.m_common.ackSeq <= 0xFFFFFFFF,
-                    `Package(${CommandType.toString(this.m_common.cmdType)}) field(ackSeq:number) not filled.`);
+                    `[DHT(${this.m_common.appid})] Package(${CommandType.toString(this.m_common.cmdType)}) field(ackSeq:number) not filled.`);
             }
 
             if (this.m_common.nodes) {
@@ -238,9 +238,9 @@ class DHTPackage {
 
     _checkPeer(peer) {
         LOG_ASSERT(peer.id && typeof peer.id === 'string' && peer.id.length > 0,
-            `Package(${CommandType.toString(this.m_common.cmdType)}) field(peer.id:string) not filled.`);
+            `[DHT(${this.m_common.appid})] Package(${CommandType.toString(this.m_common.cmdType)}) field(peer.id:string) not filled.`);
         LOG_ASSERT(peer.eplist && typeof peer.eplist === 'object' && typeof peer.eplist[0] === 'string',
-            `Package(${CommandType.toString(this.m_common.cmdType)}) field(peer.eplist:array[string]) not filled.`);
+            `[DHT(${this.m_common.appid})] Package(${CommandType.toString(this.m_common.cmdType)}) field(peer.eplist:array[string]) not filled.`);
     }
 
     _fillDefaultBodyField() {

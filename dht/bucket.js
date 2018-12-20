@@ -47,7 +47,8 @@ let __totalBucketCount = 0;
 
 class Bucket {
     constructor(localPeer,
-        { BUCKET_COUNT = BucketConfig.BucketCount,
+        { appid = 0,
+        BUCKET_COUNT = BucketConfig.BucketCount,
         BUCKET_SIZE = BucketConfig.BucketSize,
         TIMEOUT_MS = BucketConfig.PeerTimeoutMS } = {}) {
 
@@ -63,6 +64,7 @@ class Bucket {
         // distance-mask:[1, 01, 001, 0001...0]
         this.m_buckets = [new SubBucket(this)];
         this.m_id = __totalBucketCount + 1;
+        this.m_appid = appid;
         __totalBucketCount++;
     }
 
@@ -265,9 +267,9 @@ class Bucket {
         let bucketNo = 0;
         let localPeerHash = this.m_localPeer.hash;
         for (let bucket of this.m_buckets) {
-            LOG_DEBUG(`mask:${HashDistance.hashBit(HashDistance.HASH_MASK, bucketNo)}, peers:`);
+            LOG_DEBUG(`[DHT${this.m_appid}] mask:${HashDistance.hashBit(HashDistance.HASH_MASK, bucketNo)}, peers:`);
             for (let peer of bucket.peerList) {
-                LOG_DEBUG(`PEER(distanse:${HashDistance.calcDistance(peer.hash, localPeerHash)} = ${peer.hash} ^ ${localPeerHash})`);
+                LOG_DEBUG(`[DHT${this.m_appid}] PEER(distanse:${HashDistance.calcDistance(peer.hash, localPeerHash)} = ${peer.hash} ^ ${localPeerHash})`);
             }
 
             bucketNo++;
@@ -424,7 +426,7 @@ class SubBucket {
     }
 
     findClosestPeers(hash, {excludePeerids = null, count = BucketConfig.FindPeerCount, maxDistance = HashDistance.MAX_HASH} = {}) {
-        LOG_ASSERT(count >= 0, `Try find negative(${count}) peers.`);
+        LOG_ASSERT(count >= 0, `[DHT${this.m_bucket.m_appid}] Try find negative(${count}) peers.`);
         if (count < 0) {
             return [];
         }

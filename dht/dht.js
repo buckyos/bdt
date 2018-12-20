@@ -64,8 +64,8 @@ const BASE_DHT_SERVICE_ID = '';
 class DHTBase extends EventEmitter {
     constructor(mixSocket, localPeer, packageFactory, taskMgr) {
         super();
-        this.m_bucket = new Bucket(localPeer);
-        this.m_distributedValueTable = new DistributedValueTable();
+        this.m_bucket = new Bucket(localPeer, {appid: packageFactory.appid});
+        this.m_distributedValueTable = new DistributedValueTable({appid: packageFactory.appid});
         this.m_packageSender = new PackageSender(mixSocket, this.m_bucket);
         this.m_packageFactory = packageFactory;
         this.m_broadcastEventEmitter = new EventEmitter();
@@ -112,8 +112,10 @@ class DHTBase extends EventEmitter {
     }
     
     // callback({dht, result, peerlist})
-    // onStep({dht, result, peerlist}): 阶段性返回找到的peer，部分应用更需要响应的及时性，返回true将中断本次搜索，callback返回result=ABORT(7)
-    findPeer(peerid, callback, onStep) {
+    // options: 
+    //      onStep({dht, result, peerlist}): 阶段性返回找到的peer，部分应用更需要响应的及时性，返回true将中断本次搜索，callback返回result=ABORT(7)
+    findPeer(peerid, options, callback) {
+        const onStep = options? options.onStep : null;
         let appendLocalHost = (peers) => {
             if (!this.m_bucket.localPeer.inactive && peerid === this.m_bucket.localPeer.peerid) {
                 let serviceDescriptor = this.m_bucket.localPeer.findService(this.servicePath);
@@ -172,7 +174,7 @@ class DHTBase extends EventEmitter {
             if (callback) {
                 callback(DHTResult.INVALID_ARGS, []);
             }
-            LOG_ASSERT(false, `LOCALPEER(${this.m_bucket.localPeer.peerid}) findPeer peerid is invalid args:${peerid}.`);
+            LOG_ASSERT(false, `[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}) findPeer peerid is invalid args:${peerid}.`);
             return DHTResult.INVALID_ARGS;
         }
 
@@ -183,7 +185,7 @@ class DHTBase extends EventEmitter {
             return DHTResult.SUCCESS;
         }
         */
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) findPeer peerid(${peerid}).`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) findPeer peerid(${peerid}).`);
 
         this.m_taskExecutor.findPeer(peerid, true, callback, onStep);
         return DHTResult.PENDING;
@@ -194,12 +196,12 @@ class DHTBase extends EventEmitter {
             && typeof keyName === 'string' && keyName.length > 0 && keyName != TOTAL_KEY
             && value !== undefined && value !== null) {
 
-            LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) saveValue (${tableName}:${keyName}:${value}).`);
+            LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) saveValue (${tableName}:${keyName}:${value}).`);
 
             this.m_localValueMgr.saveValue(tableName, keyName, value);
             return DHTResult.SUCCESS;
         } else {
-            LOG_ASSERT(false, `SaveValue invalid args, (tableName: ${tableName}, keyName: ${keyName}, value: ${value}).`);
+            LOG_ASSERT(false, `[DHT(${this.appid})] SaveValue invalid args, (tableName: ${tableName}, keyName: ${keyName}, value: ${value}).`);
             return DHTResult.INVALID_ARGS;
         }
     }
@@ -208,12 +210,12 @@ class DHTBase extends EventEmitter {
         if (typeof tableName === 'string' && tableName.length > 0
             && typeof keyName === 'string' && keyName.length > 0) {
 
-            LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) deleteValue (${tableName}:${keyName}).`);
+            LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) deleteValue (${tableName}:${keyName}).`);
                 
             this.m_localValueMgr.deleteValue(tableName, keyName);
             return DHTResult.SUCCESS;
         } else {
-            LOG_ASSERT(false, `DeleteValue invalid args, (tableName: ${tableName}, keyName: ${keyName}).`);
+            LOG_ASSERT(false, `[DHT(${this.appid})] DeleteValue invalid args, (tableName: ${tableName}, keyName: ${keyName}).`);
             return DHTResult.INVALID_ARGS;
         }
     }
@@ -237,7 +239,7 @@ class DHTBase extends EventEmitter {
         if (typeof tableName === 'string' && tableName.length > 0
             && typeof keyName === 'string' && keyName.length > 0) {
 
-            LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) getValue (${tableName}:${keyName}), flags:${flags}.`);
+            LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) getValue (${tableName}:${keyName}), flags:${flags}.`);
                 
             // 可能本地节点就是最距离目标table最近的节点
 /*            let values = null;
@@ -282,7 +284,7 @@ class DHTBase extends EventEmitter {
 
             return DHTResult.PENDING;
         } else {
-            LOG_ASSERT(false, `GetValue invalid args, (tableName: ${tableName}, keyName: ${keyName}).`);
+            LOG_ASSERT(false, `[DHT(${this.appid})] GetValue invalid args, (tableName: ${tableName}, keyName: ${keyName}).`);
             return DHTResult.INVALID_ARGS;
         }
     }
@@ -292,7 +294,7 @@ class DHTBase extends EventEmitter {
     }
 
     _emitBroadcastEvent(eventName, params) {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) emitBroadcastEvent(${eventName}:${params})`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) emitBroadcastEvent(${eventName}:${params})`);
         if (typeof eventName === 'string') {
             this.m_taskExecutor.emitBroadcastEvent(eventName,
                 params,
@@ -301,31 +303,31 @@ class DHTBase extends EventEmitter {
                 {});
             return DHTResult.PENDING;
         } else {
-            LOG_ASSERT(false, `emitBroadcastEvent invalid args, (eventName type: ${typeof eventName}).`);
+            LOG_ASSERT(false, `[DHT(${this.appid})] emitBroadcastEvent invalid args, (eventName type: ${typeof eventName}).`);
             return DHTResult.INVALID_ARGS;
         }
     }
 
     // listener(eventName, params, sourcePeer)
     attachBroadcastEventListener(eventName, listener) {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) attachBroadcastEventListener(${eventName})`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) attachBroadcastEventListener(${eventName})`);
         if (typeof eventName === 'string' && typeof listener === 'function') {
             this.m_broadcastEventEmitter.on(eventName, listener);
             return {eventName, listener, result: DHTResult.SUCCESS};
         } else {
-            LOG_ASSERT(false, `attachBroadcastEventListener invalid args type, (eventName type: ${typeof eventName}, listener type: ${typeof listener}).`);
+            LOG_ASSERT(false, `[DHT(${this.appid})] attachBroadcastEventListener invalid args type, (eventName type: ${typeof eventName}, listener type: ${typeof listener}).`);
             return {result: DHTResult.INVALID_ARGS};
         }
     }
 
     // attachBroadcastEventListener相同输入参数
     detachBroadcastEventListener(eventName, listener) {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) detachBroadcastEventListener(${eventName})`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) detachBroadcastEventListener(${eventName})`);
         if (typeof eventName === 'string' && typeof listener === 'function') {
             this.m_broadcastEventEmitter.removeListener(eventName, listener);
             return DHTResult.SUCCESS;
         } else {
-            LOG_ASSERT(false, `detachBroadcastEventListener invalid args type, (eventName type: ${typeof eventName}, listener type: ${typeof listener}).`);
+            LOG_ASSERT(false, `[DHT(${this.appid})] detachBroadcastEventListener invalid args type, (eventName type: ${typeof eventName}, listener type: ${typeof listener}).`);
             return DHTResult.INVALID_ARGS;
         }
     }
@@ -346,9 +348,9 @@ class DHTBase extends EventEmitter {
         if (typeof servicePath === 'string') {
             servicePath = [servicePath];
         }
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) prepareServiceDHT(${servicePath})`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) prepareServiceDHT(${servicePath})`);
         if (!servicePath || servicePath.length <= 0) {
-            LOG_ASSERT(false, `prepareServiceDHT invalid args type, (servicePath: ${servicePath}).`);
+            LOG_ASSERT(false, `[DHT(${this.appid})] prepareServiceDHT invalid args type, (servicePath: ${servicePath}).`);
             return null;
         }
 
@@ -367,9 +369,9 @@ class DHTBase extends EventEmitter {
     }
 
     findServiceDHT(servicePath) {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) prepareServiceDHT(${servicePath})`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) prepareServiceDHT(${servicePath})`);
         if (!servicePath || servicePath.length <= 0) {
-            LOG_ASSERT(false, `findServiceDHT invalid args type, (servicePath: ${servicePath}).`);
+            LOG_ASSERT(false, `[DHT(${this.appid})] findServiceDHT invalid args type, (servicePath: ${servicePath}).`);
             return null;
         }
 
@@ -392,7 +394,7 @@ class DHTBase extends EventEmitter {
                 peerList.push(new Peer(peer));
             }
         });
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) getAllOnlinePeers(count=${peerList.length})`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) getAllOnlinePeers(count=${peerList.length})`);
         return peerList;
     }
 
@@ -403,8 +405,8 @@ class DHTBase extends EventEmitter {
     //    <function> onStep({dht, result, peerlist}), 定时返回已经搜索到的全部peer列表，搜索完成时间可能比较长，部分要求及时响应的需求可以处理该事件，返回true停止搜索
     //    <function> filter(peer)，过滤搜索到的节点，返回true表示该peer有效
     // }
-    getRandomPeers(count, fromLocal, callback, options) {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) getRandomPeers count(${count}).`);
+    getRandomPeers(count, fromLocal, options, callback) {
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) getRandomPeers count(${count}).`);
 
         options = options || {};
 
@@ -439,7 +441,7 @@ class DHTBase extends EventEmitter {
     // private:
     // servicePath是协议包所属目标服务相对当前子服务的子路径
     _process(cmdPackage, remotePeer, remoteAddr, localAddr, servicePath) {
-        LOG_TRACE(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) Got package(${DHTCommandType.toString(cmdPackage.cmdType)}), servicePath: ${cmdPackage.servicePath}`);
+        LOG_TRACE(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) Got package(${DHTCommandType.toString(cmdPackage.cmdType)}), servicePath: ${cmdPackage.servicePath}`);
         if (!servicePath) {
             let targetServicePath = cmdPackage.servicePath || [];
             let selfServicePath = this.servicePath;
@@ -469,7 +471,7 @@ class DHTBase extends EventEmitter {
 
     // serviceDescriptor是当前子服务网络的描述符
     _activePeer(peer, isSent, isReceived, isTrust, serviceDescriptor, cmdPackage) {
-        // LOG_DEBUG(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) Got new peer(${peer.peerid}) for (send:${isSent},recv:${isReceived},trust:${isTrust}),serviceDescriptor=${serviceDescriptor}`);
+        // LOG_DEBUG(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) Got new peer(${peer.peerid}) for (send:${isSent},recv:${isReceived},trust:${isTrust}),serviceDescriptor=${serviceDescriptor}`);
         if (!serviceDescriptor && !peer.inactive) {
             serviceDescriptor = peer.findService(this.servicePath);
         }
@@ -481,12 +483,12 @@ class DHTBase extends EventEmitter {
                 let isOnlineBefore = existPeer? existPeer.isOnline(this.m_bucket.TIMEOUT_MS) : true;
                 let {peer: activedPeer, isNew, discard, replace} = this.m_bucket.activePeer(peer, isSent, isReceived, isTrust);
                 if (isNew && !discard) {
-                    LOG_DEBUG(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) Got new peer(${peer.peerid}) for (send:${isSent},recv:${isReceived},trust:${isTrust}),serviceDescriptor=${serviceDescriptor}`);
+                    LOG_DEBUG(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) Got new peer(${peer.peerid}) for (send:${isSent},recv:${isReceived},trust:${isTrust}),serviceDescriptor=${serviceDescriptor}`);
                     this.m_routeTable.ping(activedPeer);
                 }
             }
         } else {
-            LOG_DEBUG(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) remove peer(${peer.peerid}) from bucket for (inactive:${peer.inactive}),serviceDescriptor=${serviceDescriptor? serviceDescriptor.isSigninServer() : undefined}`);
+            LOG_DEBUG(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) remove peer(${peer.peerid}) from bucket for (inactive:${peer.inactive}),serviceDescriptor=${serviceDescriptor? serviceDescriptor.isSigninServer() : undefined}`);
             this.m_bucket.removePeer(peer.peerid);
         }
 
@@ -541,9 +543,9 @@ class DHTBase extends EventEmitter {
         this.__lastLogTime = this.__lastLogTime || 0;
         if (now - this.__lastLogTime >= 600000) {
             this.__lastLogTime = now;
-            LOG_DEBUG(`DHT.status(serviceID:${this.servicePath}):`);
+            LOG_DEBUG(`[DHT(${this.appid})] DHT.status(serviceID:${this.servicePath}):`);
 
-            LOG_DEBUG(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath})<><><><><>connected to ${this.m_bucket.peerCount} peers, bucketCount = ${this.m_bucket.bucketCount}.`);
+            LOG_DEBUG(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath})<><><><><>connected to ${this.m_bucket.peerCount} peers, bucketCount = ${this.m_bucket.bucketCount}.`);
 
             // print other peers (peerid, addres, eplist) except myself
             this.m_bucket.m_buckets.forEach( bucket => {
@@ -560,18 +562,18 @@ class DHTBase extends EventEmitter {
                     };
                 });
 
-                LOG_DEBUG('peerlist:', peerList);
+                LOG_DEBUG(`[DHT(${this.appid})]`, 'peerlist:', peerList);
             });
 
             let logPkgStat = stat => {
-                LOG_DEBUG(`udp:${JSON.stringify(stat.udp)}`);
-                LOG_DEBUG(`tcp:${JSON.stringify(stat.tcp)}`);
+                LOG_DEBUG(`[DHT(${this.appid})] udp:${JSON.stringify(stat.udp)}`);
+                LOG_DEBUG(`[DHT(${this.appid})] tcp:${JSON.stringify(stat.tcp)}`);
                 let pkgsArray = [...stat.pkgs];
-                LOG_DEBUG(`pkgs(cmdType,count):${JSON.stringify(pkgsArray)}`);
+                LOG_DEBUG(`[DHT(${this.appid})] pkgs(cmdType,count):${JSON.stringify(pkgsArray)}`);
             };
-            LOG_DEBUG('pkg.stat.recv:');
+            LOG_DEBUG(`[DHT(${this.appid})] pkg.stat.recv:`);
             logPkgStat(Stat.stat().recv);
-            LOG_DEBUG('pkg.stat.send:');
+            LOG_DEBUG(`[DHT(${this.appid})] pkg.stat.send:`);
             logPkgStat(Stat.stat().send);
         }
         this.m_subServiceDHTs.forEach(sub => sub._logStatus());
@@ -593,8 +595,8 @@ class DHT extends DHTBase {
     localPeerInfo: PEERINFO
      */
     constructor(mixSocket, localPeerInfo, appid = DHTAPPID.none) {
-        LOG_INFO(`DHT will be created with mixSocket:${mixSocket}, and localPeerInfo:(peerid:${localPeerInfo.peerid}, eplist:${localPeerInfo.eplist})`);
-        LOG_ASSERT(Peer.isValidPeerid(localPeerInfo.peerid), `Local peerid is invalid:${localPeerInfo.peerid}.`);
+        LOG_INFO(`[DHT(${appid})] DHT will be created with mixSocket:${mixSocket}, and localPeerInfo:(peerid:${localPeerInfo.peerid}, eplist:${localPeerInfo.eplist})`);
+        LOG_ASSERT(Peer.isValidPeerid(localPeerInfo.peerid), `[DHT(${appid})] Local peerid is invalid:${localPeerInfo.peerid}.`);
 
         let localPeer = new LocalPeer(localPeerInfo);
         localPeer.___create_flag = 160809;
@@ -617,7 +619,7 @@ class DHT extends DHTBase {
      * @param {boolean} manualActiveLocalPeer 手动激活本地PEER，如果置true，本地peer将不会被其他任何PEER找到，只能作为访问者访问DHT网络
      */
     start(manualActiveLocalPeer = false) {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) will start.`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) will start.`);
 
         if (!this.m_timer) {
             Stat.addLocalPeer(this.m_bucket.localPeer);
@@ -639,7 +641,7 @@ class DHT extends DHTBase {
     }
 
     stop() {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) will stop.`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) will stop.`);
         if (this.m_timer) {
             clearInterval(this.m_timer);
             this.m_timer = null;
@@ -695,11 +697,11 @@ class DHT extends DHTBase {
     }
 
     process(socket, message, remoteAddr, localAddr) {
-        // LOG_DEBUG(`Got package from(${remoteAddr.address}:${remoteAddr.port})`);
+        // LOG_DEBUG(`[DHT(${this.appid})] Got package from(${remoteAddr.address}:${remoteAddr.port})`);
         let localPeer = this.m_bucket.localPeer;
         let dhtDecoder = DHTPackageFactory.createDecoder(message, 0, message.length);
         if (!dhtDecoder) {
-            LOG_ERROR(`LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got Invalid message:${message}.`);
+            LOG_ERROR(`[DHT(${this.appid})] LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got Invalid message:${message}.`);
             return DHTResult.INVALID_PACKAGE;
         }
         
@@ -712,7 +714,7 @@ class DHT extends DHTBase {
     }
 
     processPackage(socket, dhtDecoder, remoteAddr, localAddr) {
-        // LOG_DEBUG(`Got package from(${remoteAddr.address}:${remoteAddr.port})`);
+        // LOG_DEBUG(`[DHT(${this.appid})] Got package from(${remoteAddr.address}:${remoteAddr.port})`);
         let localPeer = this.m_bucket.localPeer;
 
         // <TODO> 检查数据包的合法性
@@ -722,20 +724,20 @@ class DHT extends DHTBase {
         }
 
         if (!cmdPackage || cmdPackage.appid !== this.m_packageFactory.appid) {
-            LOG_WARN(`LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got invalid package from(${remoteAddr.address}:${remoteAddr.port})`);
+            LOG_WARN(`[DHT(${this.appid})] LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got invalid package from(${remoteAddr.address}:${remoteAddr.port})`);
             return dhtDecoder.totalLength;
         }
 
         if (cmdPackage.servicePath && cmdPackage.servicePath.length) {
-            LOG_DEBUG('[DHT]', 'servicePath: ',`${cmdPackage.servicePath}`);
+            LOG_DEBUG(`[DHT(${this.appid})] `, 'servicePath: ',`${cmdPackage.servicePath}`);
         }
 
         const cmdType = cmdPackage.cmdType;
         if ((cmdType !== DHTCommandType.PACKAGE_PIECE_REQ && (!cmdPackage.dest || cmdPackage.dest.peerid !== localPeer.peerid))
             || !HashDistance.checkEqualHash(cmdPackage.dest.hash, localPeer.hash)) {
-            LOG_WARN(`LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got package(${DHTCommandType.toString(cmdType)}) ` + 
-                `to other peer(id:${cmdPackage.dest.peerid},hash:${cmdPackage.dest.hash}),` +
-                `localPeer is (id:${localPeer.peerid},hash:${localPeer.hash}),` +
+            LOG_WARN(`[DHT(${this.appid})] LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got package(${DHTCommandType.toString(cmdType)}) `,
+                `to other peer(id:${cmdPackage.dest.peerid},hash:${cmdPackage.dest.hash}),`,
+                `localPeer is (id:${localPeer.peerid},hash:${localPeer.hash}),`,
                 `from:${cmdPackage.src.peerid}:${EndPoint.toString(remoteAddr)}, to:${cmdPackage.common.dest.ep}`);
             return dhtDecoder.totalLength;
         }
@@ -747,11 +749,11 @@ class DHT extends DHTBase {
 
         if (typeof cmdPackage.src.peerid !== 'string' || cmdPackage.src.peerid.length === 0 ||
             !HashDistance.checkEqualHash(cmdPackage.src.hash, HashDistance.hash(cmdPackage.src.peerid))) {
-            LOG_WARN(`LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got package hash verify failed.(id:${cmdPackage.dest.peerid},hash:${cmdPackage.dest.hash}), localPeer is (id:${localPeer.peerid},hash:${localPeer.hash})`);
+            LOG_WARN(`[DHT(${this.appid})] LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got package hash verify failed.(id:${cmdPackage.dest.peerid},hash:${cmdPackage.dest.hash}), localPeer is (id:${localPeer.peerid},hash:${localPeer.hash})`);
             return dhtDecoder.totalLength;
         }
 
-        LOG_DEBUG(`LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got package(${DHTPackage.CommandType.toString(cmdPackage.cmdType)}) from(${EndPoint.toString(remoteAddr)}|${cmdPackage.src.peerid})`);
+        LOG_DEBUG(`[DHT(${this.appid})] LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got package(${DHTPackage.CommandType.toString(cmdPackage.cmdType)}) from(${EndPoint.toString(remoteAddr)}|${cmdPackage.src.peerid})`);
         if (cmdPackage.common.dest.ep) {
             // maintain local peer valid internet address
             localPeer.unionEplist([cmdPackage.common.dest.ep], socket.isReuseListener);
@@ -793,7 +795,7 @@ class DHT extends DHTBase {
     // 启动时的初始节点也通过该接口传入；
     // remotePeerInfo：PEERINFO
     activePeer(remotePeerInfo, address, isSent, isReceived) {
-        LOG_ASSERT(Peer.isValidPeerid(remotePeerInfo.peerid), `ActivePeer peerid is invalid:${remotePeerInfo.peerid}.`);
+        LOG_ASSERT(Peer.isValidPeerid(remotePeerInfo.peerid), `[DHT(${this.appid})] ActivePeer peerid is invalid:${remotePeerInfo.peerid}.`);
         if (!Peer.isValidPeerid(remotePeerInfo.peerid)) {
             return DHTResult.INVALID_ARGS;
         }
@@ -801,7 +803,7 @@ class DHT extends DHTBase {
         let remotePeer = new Peer(remotePeerInfo);
         remotePeer.address = address;
 
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) got new PEER(${remotePeerInfo.peerid}:${remotePeerInfo.eplist}) from user.`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) got new PEER(${remotePeerInfo.peerid}:${remotePeerInfo.eplist}) from user.`);
         this._activePeer(remotePeer, isSent, isReceived, false);
         return DHTResult.SUCCESS;
     }
@@ -811,7 +813,7 @@ class DHT extends DHTBase {
     //      broadcast: true
     // }
     activeLocalPeer(enable = true, options) {
-        LOG_INFO('local peer added in bucket.');
+        LOG_INFO(`[DHT(${this.appid})] local peer added in bucket.`);
         let _options = {
             broadcast: true,
         };
@@ -836,7 +838,7 @@ class DHT extends DHTBase {
     }
 
     ping(remotePeerInfo, immediate) {
-        LOG_ASSERT(Peer.isValidPeerid(remotePeerInfo.peerid), `ActivePeer peerid is invalid:${remotePeerInfo.peerid}.`);
+        LOG_ASSERT(Peer.isValidPeerid(remotePeerInfo.peerid), `[DHT(${this.appid})] ActivePeer peerid is invalid:${remotePeerInfo.peerid}.`);
         if (!Peer.isValidPeerid(remotePeerInfo.peerid)) {
             return DHTResult.INVALID_ARGS;
         }
@@ -875,17 +877,17 @@ class DHT extends DHTBase {
     }
 
     updateLocalPeerAdditionalInfo(keyName, newValue) {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) updateLocalPeerAdditionalInfo (${keyName}:${newValue}).`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) updateLocalPeerAdditionalInfo (${keyName}:${newValue}).`);
         this.m_bucket.localPeer.updateAdditionalInfo(keyName, newValue);
     }
 
     getLocalPeerAdditionalInfo(keyName) {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) getLocalPeerAdditionalInfo (${keyName}).`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) getLocalPeerAdditionalInfo (${keyName}).`);
         return this.m_bucket.localPeer.getAdditionalInfo(keyName);
     }
 
     deleteLocalPeerAdditionalInfo(keyName) {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) deleteLocalPeerAdditionalInfo (${keyName}).`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) deleteLocalPeerAdditionalInfo (${keyName}).`);
         return this.m_bucket.localPeer.deleteAdditionalInfo(keyName);
     }
 
@@ -904,7 +906,7 @@ class DHT extends DHTBase {
                 return;
         }
 
-        LOG_DEBUG(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) got package piece (taskid:${cmdPackage.body.taskid},max:${cmdPackage.body.max},no:${cmdPackage.body.no}).`);
+        LOG_DEBUG(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) got package piece (taskid:${cmdPackage.body.taskid},max:${cmdPackage.body.max},no:${cmdPackage.body.no}).`);
 
         cmdPackage.body.max = parseInt(cmdPackage.body.max);
         cmdPackage.body.no = parseInt(cmdPackage.body.no);
@@ -970,7 +972,7 @@ class ServiceDHT extends DHTBase {
     }
 
     signinVistor() {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) signinVistor.`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) signinVistor.`);
         let isRunningBefore = this.isRunning();
         this.m_flags |= ServiceDHT.FLAGS_SIGNIN_VISTOR;
 
@@ -980,7 +982,7 @@ class ServiceDHT extends DHTBase {
     }
 
     signoutVistor() {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) signoutVistor.`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) signoutVistor.`);
         this.m_flags &= ~ServiceDHT.FLAGS_SIGNIN_VISTOR;
         if (this.m_subServiceDHTs.size === 0 && !this.isRunning()) {
             this.m_father._onSubServiceDHTOffWork(this);
@@ -988,7 +990,7 @@ class ServiceDHT extends DHTBase {
     }
 
     signinServer() {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) signinServer.`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) signinServer.`);
         let isRunningBefore = this.isRunning();
         this.m_flags |= ServiceDHT.FLAGS_SIGNIN_SERVER;
         let localPeer = this.m_bucket.localPeer;
@@ -1000,7 +1002,7 @@ class ServiceDHT extends DHTBase {
     }
 
     signoutServer() {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) signoutServer.`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) signoutServer.`);
         this.m_flags &= ~ServiceDHT.FLAGS_SIGNIN_SERVER;
         let localPeer = this.m_bucket.localPeer;
         localPeer.signoutService(this.m_servicePath);
@@ -1014,18 +1016,18 @@ class ServiceDHT extends DHTBase {
     }
 
     updateServiceInfo(key, value) {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) updateServiceInfo(${key}:${value}).`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) updateServiceInfo(${key}:${value}).`);
         this.m_bucket.localPeer.updateServiceInfo(this.m_servicePath, key, value);
     }
 
     getServiceInfo(key) {
         let value = this.m_bucket.localPeer.getServiceInfo(this.m_servicePath, key);
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) getServiceInfo(${key}:${value}).`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) getServiceInfo(${key}:${value}).`);
         return value;
     }
 
     deleteServiceInfo(key) {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) deleteServiceInfo(${key}).`);
+        LOG_INFO(`[DHT(${this.appid})] LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) deleteServiceInfo(${key}).`);
         this.m_bucket.localPeer.deleteServiceInfo(this.m_servicePath, key);
     }
 

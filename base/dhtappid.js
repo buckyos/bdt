@@ -36,9 +36,6 @@ const DHTAPPID = {
     sn: 1, // 用于穿透的SN服务器
     
     userBase: 160809,
-
-    blockchainBase: 160810, // 区块链应用ID分配段
-    bcINT: 160811, // INT链
 };
 
 module.exports = DHTAPPID;

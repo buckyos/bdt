@@ -67,7 +67,7 @@ class GetValueTask extends TouchNodeConvergenceTask {
     }
 
     _processImpl(response, remotePeer) {
-        LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed GetValue(${this.m_tableName}:${this.m_keyName}:${this.m_flags})`);
+        LOG_INFO(`[DHT(${this.packageFactory.appid})] LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed GetValue(${this.m_tableName}:${this.m_keyName}:${this.m_flags})`);
         if (response.body.values) {
             if (response.body.r_nodes && Array.isArray(response.body.r_nodes)) {
                 response.body.r_nodes.forEach(peerid => {
@@ -86,7 +86,7 @@ class GetValueTask extends TouchNodeConvergenceTask {
     }
 
     _onCompleteImpl(result) {
-        LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) complete GetValue(count=${this.m_values? this.m_values.size : 0})`);
+        LOG_INFO(`[DHT(${this.packageFactory.appid})] LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) complete GetValue(count=${this.m_values? this.m_values.size : 0})`);
         this._callback(result, this.m_values, this.m_arrivePeeridSet);
         super.destroy();
     }

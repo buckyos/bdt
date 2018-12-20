@@ -42,7 +42,8 @@ const ValueTableConfig = Config.ValueTable;
 const HashConfig = Config.Hash;
 
 class DistributedValueTableMgr {
-    constructor({ TABLE_COUNT = ValueTableConfig.TableCount,
+    constructor({ appid = 0,
+        TABLE_COUNT = ValueTableConfig.TableCount,
         TABLE_SIZE = ValueTableConfig.TableSize,
         TIMEOUT_MS = ValueTableConfig.ValueTimeoutMS } = {}) {
 
@@ -53,12 +54,13 @@ class DistributedValueTableMgr {
         // <tableName, table>
         this.m_tables = new Map();
         this.m_earlyUpdateTime = 0;
+        this.m_appid = appid;
     }
 
     updateValue(tableName, keyName, value) {
         let table = this.m_tables.get(tableName);
         if (!table) {
-            table = new DistributedValueTable();
+            table = new DistributedValueTable(this);
             this.m_tables.set(tableName, table);
         }
 
@@ -137,7 +139,7 @@ class DistributedValueTableMgr {
 
     log() {
         for (let [tableName, table] of this.m_tables) {
-            LOG_DEBUG(`Table(${tableName}) count(${table.values.size}):`);
+            LOG_DEBUG(`[DHT${this.m_appid}] Table(${tableName}) count(${table.values.size}):`);
             for (let [keyName, valueObj] of table.values) {
                 LOG_DEBUG(`\t${keyName}\t${valueObj.value}`);
             }
@@ -147,10 +149,11 @@ class DistributedValueTableMgr {
 }
 
 class DistributedValueTable {
-    constructor() {
+    constructor(owner) {
         this.m_values = new Map();
         this.m_earlyUpdateTime = 0;
         this.m_lastUpdateTime = 0;
+        this.m_owner = owner;
     }
 
     get values() {
@@ -231,7 +234,7 @@ class DistributedValueTable {
     }
 
     findClosestValues(keyName, {count = ValueTableConfig.FindCloseKeyCount, maxDistance = HashDistance.MAX_HASH} = {}) {
-        LOG_ASSERT(count >= 0, `Try find negative(${count}) values.`);
+        LOG_ASSERT(count >= 0, `[DHT${this.m_owner.m_appid}] Try find negative(${count}) values.`);
         if (count < 0) {
             return new Map();
         }
@@ -270,7 +273,7 @@ class DistributedValueTable {
     }
 
     findLatestValues(keyName, {count = ValueTableConfig.FindCloseKeyCount, maxDistance = HashDistance.MAX_HASH} = {}) {
-        LOG_ASSERT(count >= 0, `Try find negative(${count}) values.`);
+        LOG_ASSERT(count >= 0, `[DHT${this.m_appid}] Try find negative(${count}) values.`);
         if (count < 0) {
             return new Map();
         }

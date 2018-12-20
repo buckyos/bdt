@@ -58,7 +58,7 @@ class SplitPackageTask extends Task {
     }
 
     _startImpl() {
-        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) start SplitPackage(seq:${this.m_cmdPackage.common.seq},type:${this.m_cmdPackage.cmdType},taskid:${this.id}) to ${this.m_sendingPieces.length} pieces.`);
+        LOG_DEBUG(`[DHT(${this.packageFactory.appid})] LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) start SplitPackage(seq:${this.m_cmdPackage.common.seq},type:${this.m_cmdPackage.cmdType},taskid:${this.id}) to ${this.m_sendingPieces.length} pieces.`);
         this._genPieces();
         for (let [no, pkg] of this.m_sendingPieces) {
             pkg.resender.send();
@@ -69,7 +69,7 @@ class SplitPackageTask extends Task {
     }
 
     _processImpl(response, remotePeer) {
-        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) SplitPackage (seq:${this.m_cmdPackage.common.seq},type:${this.m_cmdPackage.cmdType},taskid:${this.id}) response (${response.common.ackSeq}:${response.body.taskid}:${response.body.no}).`);
+        LOG_DEBUG(`[DHT(${this.packageFactory.appid})] LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) SplitPackage (seq:${this.m_cmdPackage.common.seq},type:${this.m_cmdPackage.cmdType},taskid:${this.id}) response (${response.common.ackSeq}:${response.body.taskid}:${response.body.no}).`);
         if (!response.body.no && response.body.no !== 0) {
             return;
         }
@@ -82,7 +82,7 @@ class SplitPackageTask extends Task {
         }
 
         if (this.m_sendingPieces.size === 0) {
-            LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) SplitPackage (seq:${this.m_cmdPackage.common.seq},type:${this.m_cmdPackage.cmdType},taskid:${this.id}) done.`);
+            LOG_DEBUG(`[DHT(${this.packageFactory.appid})] LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) SplitPackage (seq:${this.m_cmdPackage.common.seq},type:${this.m_cmdPackage.cmdType},taskid:${this.id}) done.`);
             this._onComplete(DHTResult.SUCCESS);
         }
     }

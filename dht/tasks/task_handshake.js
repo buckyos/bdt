@@ -133,7 +133,7 @@ class HandshakeSourceTask extends Task {
     }
 
     _processImpl(response, remotePeer) {
-        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed HandshakeSourceTask(${this.m_targetPeer.peerid})`);
+        LOG_DEBUG(`[DHT(${this.packageFactory.appid})] LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed HandshakeSourceTask(${this.m_targetPeer.peerid})`);
         let connectedPeer = this._connectedPeer();
         if (connectedPeer
             || response.cmdType === DHTPackage.CommandType.HANDSHAKE_REQ
@@ -206,7 +206,7 @@ class HandshakeSourceTask extends Task {
     }
 
     _onCompleteImpl(result) {
-        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) HandshakeSourceTask(to:${this.m_targetPeer.peerid}) complete.`);
+        LOG_DEBUG(`[DHT(${this.packageFactory.appid})] LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) HandshakeSourceTask(to:${this.m_targetPeer.peerid}) complete.`);
         this._callback(result, this.m_targetPeer, this.m_isIncoming);
         if (this.m_holeResender) {
             this.m_holeResender.finish();
@@ -265,7 +265,7 @@ class HandshakeAgencyTask extends Task {
     }
 
     _processImpl(response, remotePeer) {
-        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed HandshakeAgencyTask(${this.m_srcPeer.peerid}=>${this.m_targetPeer.peerid})`);
+        LOG_DEBUG(`[DHT(${this.packageFactory.appid})] LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed HandshakeAgencyTask(${this.m_srcPeer.peerid}=>${this.m_targetPeer.peerid})`);
 
         if (response.cmdType === DHTPackage.CommandType.HOLE_CALLED_RESP) {
             // 收到响应包后只标记一下，协助打洞任务不需要任何结果，只等到超时就好了，后续有源peer发来的重发包直接忽略；
@@ -283,7 +283,7 @@ class HandshakeAgencyTask extends Task {
     }
 
     _onCompleteImpl(result) {
-        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) HandshakeAgencyTask(${this.m_srcPeer.peerid}=>${this.m_targetPeer.peerid}) complete.`);
+        LOG_DEBUG(`[DHT(${this.packageFactory.appid})] LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) HandshakeAgencyTask(${this.m_srcPeer.peerid}=>${this.m_targetPeer.peerid}) complete.`);
         this.m_holeResender.finish();
     }
 
@@ -329,7 +329,7 @@ class HandshakeTargetTask extends Task {
     }
 
     _processImpl(response, remotePeer) {
-        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed HandshakeTargetTask(${this.m_srcPeer.peerid})`);
+        LOG_DEBUG(`[DHT(${this.packageFactory.appid})] LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed HandshakeTargetTask(${this.m_srcPeer.peerid})`);
         
         // 对方发来握手包，说明对方能连接上，可以结束了
         if (response.cmdType === DHTPackage.CommandType.HANDSHAKE_REQ
@@ -350,7 +350,7 @@ class HandshakeTargetTask extends Task {
     }
 
     _onCompleteImpl(result) {
-        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) HandshakeTargetTask(to:${this.m_srcPeer.peerid}) complete.`);
+        LOG_DEBUG(`[DHT(${this.packageFactory.appid})] LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) HandshakeTargetTask(to:${this.m_srcPeer.peerid}) complete.`);
         this.m_handshakeResender.finish();
     }
 

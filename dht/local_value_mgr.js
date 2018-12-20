@@ -120,7 +120,7 @@ class LocalValueMgr {
 
     log() {
         for (let [tableName, table] of this.m_tables) {
-            LOG_DEBUG(`Table(${tableName}) count(${table.size}):`);
+            LOG_DEBUG(`[DHT${this.m_taskExecutor.packageFactory.appid}] Table(${tableName}) count(${table.size}):`);
             for (let [keyName, valueObj] of table) {
                 LOG_DEBUG(`\t${keyName}\t${valueObj.value}`);
             }

@@ -88,9 +88,10 @@ class PackageSender extends EventEmitter {
             !peer.__noRecommandNeighbor) {
 
             let recommandPeerList = null;
-            if (peer.onlineDuration < (Config.Peer.recommandNeighborTime >>> 2)) {
+            const onlineDurationMS = peer.onlineDuration * 1000;
+            if (onlineDurationMS < (Config.Peer.recommandNeighborTime >>> 2)) {
                 recommandPeerList = this.m_bucket.findClosestPeers(peer.peerid);
-            } else if (peer.onlineDuration < Config.Peer.recommandNeighborTime) {
+            } else if (onlineDurationMS < Config.Peer.recommandNeighborTime) {
                 recommandPeerList = this.m_bucket.getRandomPeers();
             }
             if (recommandPeerList && recommandPeerList.length > 0) {
@@ -126,7 +127,7 @@ class PackageSender extends EventEmitter {
             return;
         }
 
-        LOG_DEBUG(`PEER(${this.m_bucket.localPeer.peerid}) Send package(${DHTCommandType.toString(cmdPackage.cmdType)}) to peer(${peer.peerid})`);
+        LOG_DEBUG(`[DHT(${cmdPackage.appid})] PEER(${this.m_bucket.localPeer.peerid}) Send package(${DHTCommandType.toString(cmdPackage.cmdType)}) to peer(${peer.peerid})`);
 
         const pendingKey = this._onPreparePkg(toPeer, cmdPackage);
 
@@ -169,7 +170,7 @@ class PackageSender extends EventEmitter {
         cmdPackage.fillCommon(peerStruct, peer, recommandNodes);
         
         cmdPackage.dest.ep = EndPoint.toString(remoteAddr);
-        LOG_DEBUG(`PEER(${this.m_bucket.localPeer.peerid}) Send package(${DHTCommandType.toString(cmdPackage.cmdType)}) to peer(${cmdPackage.dest.peerid}|${peer.peerid}:${EndPoint.toString(remoteAddr)})`);
+        LOG_DEBUG(`[DHT(${cmdPackage.appid})] PEER(${this.m_bucket.localPeer.peerid}) Send package(${DHTCommandType.toString(cmdPackage.cmdType)}) to peer(${cmdPackage.dest.peerid}|${peer.peerid}:${EndPoint.toString(remoteAddr)})`);
         
         let encoder = DHTPackageFactory.createEncoder(cmdPackage);
         let buffer = encoder.encode();

@@ -103,15 +103,15 @@ class PeerFinder extends BDT.PeerFinder {
                 this.m_snDHT.findSN(peerid,
                     fromCache,
                     ({result, snList}) => {
+                            if (onStep) {
+                                return onStep([result, snList]);
+                            }
+                        },
+                    ({result, snList}) => {
                             if (result) {
                                 resolve([result]);
                             } else {
                                 resolve([BDT.ERROR.success, snList]);
-                            }
-                        },
-                    ({result, snList}) => {
-                            if (onStep) {
-                                return onStep([result, snList]);
                             }
                         });
             });
@@ -123,7 +123,7 @@ class PeerFinder extends BDT.PeerFinder {
     findPeer(peerid) {
         if (this.m_dht) {
             return new Promise(resolve => {
-                this.m_dht.findPeer(peerid, ({result, peerlist}) => {
+                this.m_dht.findPeer(peerid, null, ({result, peerlist}) => {
                     let peer = null;
                     if (peerlist && peerlist.length > 0 && peerlist[0].peerid === peerid) {
                         peer = peerlist[0];
