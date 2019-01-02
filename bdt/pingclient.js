@@ -199,6 +199,7 @@ class MultiSNPingClient extends EventEmitter {
         this.m_connecting.startTime = now;
         
         for (let peer of peerlist) {
+            this.m_stack._filterInvalidAddress(peer);
             if (peeridlist.has(peer.peerid)) {
                 let sessionid = this._genSessionid();
                 let pingClient = new PingClient(this.m_stack, peer, sessionid);
@@ -368,6 +369,10 @@ class PingClient extends EventEmitter {
     }
 
     _onPackage(decoder, remoteSender) {
+        if (this.m_stack.remoteFilter.isForbidden(remoteSender.remoteEPList[0], this.m_snPeer.peerid)) {
+            return;
+        }
+        
         let getProtocol = (sender) => {
             if (sender.remoteEPList.length > 0) {
                 let addr = BaseUtil.EndPoint.toAddress(sender.remoteEPList[0]);

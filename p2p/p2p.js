@@ -41,6 +41,7 @@ const SN = require('../sn/sn.js');
 const SNDHT = require('../sn/sn_dht.js');
 const PeerFinder = require('./peer_finder.js');
 const MixSocket = require('./mix_socket.js');
+const RemoteBlackList = require('./remote_black_list.js');
 
 const {
     BX_SetLogLevel,
@@ -89,6 +90,8 @@ class P2P extends EventEmitter {
         this.m_isClosing = false;
         this.m_listenerEPList = null;
         this.m_timer = null;
+
+        this.m_remoteFilter = new RemoteBlackList();
     }
     
     /*
@@ -373,7 +376,7 @@ class P2P extends EventEmitter {
 
         let eplist = this.eplist;
 
-        this.m_bdtStack = BDT.newStack(this.m_peerid, eplist, this.m_mixSocket, peerFinder, options);
+        this.m_bdtStack = BDT.newStack(this.m_peerid, eplist, this.m_mixSocket, peerFinder, this.m_remoteFilter, options);
         this.m_bdtStack.once(BDT.Stack.EVENT.create, () => setImmediate(() => this.emit(P2P.EVENT.BDTStackCreate)));
         this.m_bdtStack.once(BDT.Stack.EVENT.close, () => {
             this.m_bdtStack = null;
@@ -452,6 +455,26 @@ class P2P extends EventEmitter {
         return this.m_snService;
     }
 
+    /**
+     * 禁用PEERID/IP地址
+     * @param {string|P2P.FORBID.all} peerid 禁用的PEERID，undefined/null等代表逻辑false的值都被解释为P2P.FORBID.all，禁用指定IP上的所有peerid
+     * @param {string|Connection|EndPoint{family@ip@port@protocol}|{address:ip}|P2P.FORBID.all} objectWithIP 禁用的IP，undefined/null等同peerid一样处理
+     * @param { object{timeout} } options 
+     */
+    forbid(objectWithIP, peerid, options) {
+        this.m_remoteFilter.forbid(objectWithIP, peerid, options);
+    }
+
+    /**
+     * 查询指定peerid|ip是否被禁用
+     * @param {string|P2P.FORBID.all} peerid 禁用的PEERID，undefined/null等代表逻辑false的值都被解释为P2P.FORBID.all，禁用指定IP上的所有peerid
+     * @param {string|Connection|EndPoint{family@ip@port@protocol}|{address:ip}|P2P.FORBID.all} objectWithIP 禁用的IP，undefined/null等同peerid一样处理
+     * @return {boolean}
+     */
+    isForbidden(objectWithIP, peerid) {
+        return this.m_remoteFilter.isForbidden(objectWithIP, peerid);
+    }
+
     _createSocket() {
         blog.info('[P2P]: begin create socket');
 
@@ -464,9 +487,8 @@ class P2P extends EventEmitter {
         // create a mix socket Instance
         this.m_mixSocket = new MixSocket(
             (...args) => this._udpMessage(...args),
-            (...args) => this._tcpMessage(...args),
+            (...args) => this._tcpMessage(...args)
         );
-
 
         const listenerOps = [];
         const addOP = (object, protocol) => {
@@ -638,7 +660,7 @@ class P2P extends EventEmitter {
         let dhtInfo = this.m_dhtMap.get(dhtAppID);
         if (!dhtInfo) {
             isNew = true;
-            let dht = new DHT(this.m_mixSocket, {peerid: this.m_peerid, eplist: this.eplist}, dhtAppID);
+            let dht = new DHT(this.m_mixSocket, {peerid: this.m_peerid, eplist: this.eplist}, dhtAppID, this.m_remoteFilter);
             dht.once(DHT.EVENT.stop, () => {
                 this.m_dhtMap.delete(dhtAppID);
                 this._tryCloseSocket();
@@ -740,6 +762,11 @@ P2P.EVENT = {
     SNStop: 'SNStop',
     DHTCreate: 'DHTCreate',
     DHTClose: 'DHTClose',
+};
+
+P2P.FORBID = {
+    timeout: RemoteBlackList.FORBID.timeout,
+    all: RemoteBlackList.FORBID.all,
 };
 
 function debug(options = {}) {

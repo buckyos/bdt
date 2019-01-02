@@ -96,7 +96,7 @@ class MixSocket extends EventEmitter {
         this.m_paceSender = new PaceSender();
         this.m_paceSender.start();
         this.m_paceSender.on(PaceSender.EVENT.pop, (pkg, eplist, options) => this._sendImmediate(pkg, eplist, options));
-
+        
 //<<<<<<<<<统计诊断
         this.m_stat = {
             udp: {
@@ -130,6 +130,10 @@ class MixSocket extends EventEmitter {
         if (options) {
             Object.assign(this.m_options, options);
         }
+
+        this.m_timer = setInterval(() => {
+            blog.debug(`flowrate: ${JSON.stringify(this.m_stat)}`);
+        }, 10000);
     }
 
     get socketIdle() {
@@ -426,7 +430,10 @@ class MixSocket extends EventEmitter {
                 sendingSocket.send(buffer, remoteAddr.port, mapZeroIP(remoteAddr),
                     err => {
                         if (err) {
-                            blog.error(`Send package error: ${err.message}`);
+                            // 本地地址出错概率极大，不输出日志
+                            if (!(EndPoint.isLoopback(remoteAddr) || EndPoint.isZero(remoteAddr))) {
+                                blog.error(`Send package error: ${err.message}`);
+                            }
                         } else if (onPostSend) {
                             onPostSend(pkg, remoteAddr, sendingSocket, protocol);
                         }

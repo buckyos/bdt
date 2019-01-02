@@ -41,7 +41,7 @@ const SequenceU32 = BaseUtil.SequenceU32;
 const TimeHelper = BaseUtil.TimeHelper;
 const {TCPConnectionMgr} = require('./tcp_connection_helper.js');
 
-let _nextConnectID = 1;
+let _nextConnectionID = 1;
 
 class BDTConnection extends EventEmitter {
     /*
@@ -148,6 +148,9 @@ class BDTConnection extends EventEmitter {
 
         this.m_useTCP = false;
 
+        this.m_id = _nextConnectionID;
+        _nextConnectionID++;
+
         this.m_options = {
             // 是否允许半开连接：
             // 如果置true，在收到'end'事件后，依旧可以向对端发送数据，直到不再需要connection后手动调用close关闭连接；
@@ -166,9 +169,6 @@ class BDTConnection extends EventEmitter {
             this._findSN = (peerid, fromCache, onStep) => stack._findSN(peerid, fromCache, onStep);
             this._findPeer = peerid => stack._findPeer(peerid);
         }
-
-        this.m_id = _nextConnectID;
-        _nextConnectID++;
     }
 
     get local() {
@@ -184,6 +184,7 @@ class BDTConnection extends EventEmitter {
             peerid: this.m_remote.peerid,
             vport: this.m_remote.vport,
             sessionid: this.m_remote.sessionid,
+            endpoint: this.m_remote.sender? this.m_remote.sender.activeEP : null,
         };
     }
 
@@ -192,7 +193,11 @@ class BDTConnection extends EventEmitter {
     }
 
     get id() {
-        return this.m_id;
+        if (this.m_createFrom === BDTConnection.CREATE_FROM.acceptor) {
+            return `<${this.m_remote.sessionid || 'u'}-${this.m_sessionid || `l(${this.m_id})`}>`;
+        } else {
+            return `<${this.m_sessionid || `l(${this.m_id})`}-${this.m_remote.sessionid || 'u'}>`;
+        }
     }
 
     get state() {
@@ -201,13 +206,13 @@ class BDTConnection extends EventEmitter {
 
     bind(vport) {
         if (this.m_stack.state !== BDTStack.STATE.created) {
-            blog.error(`[BDT]: connection(id=${this.m_id}) bind when stack not create`);
+            blog.error(`[BDT]: connection(id=${this.id}) bind when stack not create`);
             return BDT_ERROR.invalidState;
         }
         let err = BDT_ERROR.success;
         [err, vport] = this.m_stack._genVPort(vport, this);
         if (err) {
-            blog.error(`[BDT]: connection(id=${this.m_id}) bind to vport failed for ${BDT_ERROR.toString(err)}`);
+            blog.error(`[BDT]: connection(id=${this.id}) bind to vport failed for ${BDT_ERROR.toString(err)}`);
             return err;
         }
 
@@ -215,13 +220,14 @@ class BDTConnection extends EventEmitter {
         [err, sessionid] = this.m_stack._genSessionid(this);
         if (err) {
             this.m_stack._releaseVPort(vport, this);
-            blog.error(`[BDT]: connection(id=${this.m_id}) gen sessionid failed for ${BDT_ERROR.toString(err)}`);
+            blog.error(`[BDT]: connection(id=${this.id}) gen sessionid failed for ${BDT_ERROR.toString(err)}`);
             return err;
         }
-        blog.info(`[BDT]: connection(id=${this.m_id}) bind to vport ${vport}`);
+        blog.info(`[BDT]: connection(id=${this.id}) bind to vport ${vport}`);
         this.m_createFrom = BDTConnection.CREATE_FROM.connect;
         this.m_vport = vport;
         this.m_sessionid = sessionid;
+        delete this.m_id;
         return BDT_ERROR.success;
     }
 
@@ -248,7 +254,7 @@ class BDTConnection extends EventEmitter {
             this.m_state !== BDTConnection.STATE.closeWait) {
             return 0;
         }
-        blog.debug(`[BDT]: connection(id=${this.m_id}) send, buffer.length=${buffer.length}`);
+        blog.debug(`[BDT]: connection(id=${this.id}) send, buffer.length=${buffer.length}`);
         return this.m_transfer.send(buffer);
     }
 
@@ -261,6 +267,7 @@ class BDTConnection extends EventEmitter {
             return Promise.resolve();    
         }
         return new Promise((resolve)=>{
+            blog.info(`[BDT]: connection(id=${this.id}) will be closed. and remote is ${this.m_remote.peerid}@${this.m_remote.vport}.`);
             this.once(BDTConnection.EVENT.close, ()=>{
                 if (callback) {
                     callback();
@@ -289,14 +296,14 @@ class BDTConnection extends EventEmitter {
         let seq = this.m_nextSeq;
         this.m_nextSeq = SequenceU32.add(this.m_nextSeq, length);
         if (length !== 0) {
-            blog.debug(`[BDT]: connection(id=${this.m_id}) update seq to ${this.m_nextSeq}`);
+            blog.debug(`[BDT]: connection(id=${this.id}) update seq to ${this.m_nextSeq}`);
         }
         return seq; 
     }
 
     _setNextRemoteSeq(remoteSeq) {
         this.m_nextRemoteSeq = remoteSeq;
-        blog.debug(`[BDT]: connection(id=${this.m_id}) update remote seq to ${remoteSeq}`);
+        blog.debug(`[BDT]: connection(id=${this.id}) update remote seq to ${remoteSeq}`);
         return this.m_nextRemoteSeq;
     }
 
@@ -328,7 +335,7 @@ class BDTConnection extends EventEmitter {
     }
 
     _connect(params) {
-        blog.info(`[BDT]: connection(id=${this.m_id}) begin connect to ${params.peerid}:${params.vport}`);
+        blog.info(`[BDT]: connection(id=${this.id}) begin connect to ${params.peerid}:${params.vport}`);
         let connectOp = new Promise(
             (resolve, reject)=>{
                 this.once(BDTConnection.EVENT.error, (err)=>{
@@ -338,12 +345,12 @@ class BDTConnection extends EventEmitter {
                     resolve(BDT_ERROR.success);
                 });
                 if (this.m_state !== BDTConnection.STATE.init) {
-                    blog.warn(`[BDT]: connection(id=${this.m_id}) try to connect in state ${BDTConnection.STATE.toString(this.m_state)}`);
+                    blog.warn(`[BDT]: connection(id=${this.id}) try to connect in state ${BDTConnection.STATE.toString(this.m_state)}`);
                     setImmediate(() => this.emit(BDTConnection.EVENT.error, BDT_ERROR.invalidState));
                     return ;
                 }
                 if (!this.m_vport) {
-                    blog.warn(`[BDT]: connection(id=${this.m_id}) try to connect before bind to vport`);
+                    blog.warn(`[BDT]: connection(id=${this.id}) try to connect before bind to vport`);
                     setImmediate(() => this.emit(BDTConnection.EVENT.error, BDT_ERROR.conflict));
                     return ;
                 }
@@ -374,11 +381,12 @@ class BDTConnection extends EventEmitter {
         // generate local sessionid
         let [err, sessionid] = this.m_stack._genSessionid(this);
         if (err) {
-            blog.error(`[BDT]: create connection(id=${this.m_id}) from acceptor on vport ${this.m_vport} with remote ${this.m_remote} failed, err = ${BDT_ERROR.toString(err)}`);
+            blog.error(`[BDT]: create connection(id=${this.id}) from acceptor on vport ${this.m_vport} with remote ${this.m_remote.peerid}:${this.m_remote.vport}:${this.m_remote.sessionid} failed, err = ${BDT_ERROR.toString(err)}`);
             return err;
         }
         this.m_sessionid = sessionid;
-        blog.info(`[BDT]: create connection(id=${this.m_id}) from acceptor on vport ${this.m_vport} with remote ${this.m_remote}`);
+        blog.info(`[BDT]: create connection(id=${this.id}) from acceptor on vport ${this.m_vport} with remote ${this.m_remote.peerid}:${this.m_remote.vport}:${this.m_remote.sessionid}`);
+        delete this.m_id;
         return BDT_ERROR.success;
     }
 
@@ -516,7 +524,13 @@ class BDTConnection extends EventEmitter {
         }
 
         let remoteEP = remoteSender.remoteEPList[0];
+
         if (decoder.header.cmdType === BDTPackage.CMD_TYPE.calledReq) {
+            // 被禁用的地址
+            if (this.m_stack.remoteFilter.isForbidden(remoteEP)) {
+                return;
+            }
+
             let calledResp = null;
             let state = this.m_state;
             if (this.m_state === BDTConnection.STATE.init) {
@@ -524,7 +538,7 @@ class BDTConnection extends EventEmitter {
                     this.m_stack.mixSocket,
                     null, 
                     decoder.body.eplist);
-                blog.debug(`[BDT]: connection(id=${this.m_id}) update connecting remote address to ${decoder.body.eplist}`);
+                blog.debug(`[BDT]: connection(id=${this.id}) update connecting remote address to ${decoder.body.eplist}`);
                 calledResp = this._createCalledRespPackage(decoder, isDynamic);
                 let calledResps = {};
                 this.m_respPackages[calledResp.header.cmdType] = calledResps;
@@ -538,7 +552,7 @@ class BDTConnection extends EventEmitter {
                 if ((decoder.body.eplist && decoder.body.eplist.length > 0) ||
                     (decoder.body.dynamics && decoder.body.dynamics.length > 0)) {
                     this._addRemoteEP(decoder.body.eplist, decoder.body.dynamics);
-                    blog.debug(`[BDT]: connection(id=${this.m_id}) update connecting remote address to ${decoder.body.eplist}`);
+                    blog.debug(`[BDT]: connection(id=${this.id}) update connecting remote address to ${decoder.body.eplist}`);
                 }
 
                 // sn重发的called 包在任何时候都要回复called resp
@@ -563,6 +577,11 @@ class BDTConnection extends EventEmitter {
             }
             return ;
         } else if (decoder.header.cmdType === BDTPackage.CMD_TYPE.callResp) {
+            // 被禁用的地址
+            if (this.m_stack.remoteFilter.isForbidden(remoteEP)) {
+                return;
+            }
+
             let now = TimeHelper.uptimeMS();
             if (this.m_stack.options.debug) {
                 if (this.queryRemote.sn.respEP1 === 0) {
@@ -589,7 +608,7 @@ class BDTConnection extends EventEmitter {
                 if ((decoder.body.eplist && decoder.body.eplist.length > 0) ||
                     (decoder.body.dynamics && decoder.body.dynamics.length > 0)) {
                     this._addRemoteEP(decoder.body.eplist, decoder.body.dynamics);
-                    blog.debug(`[BDT]: connection(id=${this.m_id}) update connecting remote address to ${decoder.body.eplist} & ${decoder.body.dynamics}`);
+                    blog.debug(`[BDT]: connection(id=${this.id}) update connecting remote address to ${decoder.body.eplist} & ${decoder.body.dynamics}`);
                 }
 
                 if (this.m_snCall) {
@@ -599,6 +618,11 @@ class BDTConnection extends EventEmitter {
                     this.m_snCall.respTime = now;
                 }
             }
+        }
+
+        // 被禁用的地址
+        if (this.m_stack.remoteFilter.isForbidden(remoteEP, this.m_remote.peerid)) {
+            return;
         }
         
         // TCP和动态socket应该始终确定remoteEP和socket
@@ -631,7 +655,7 @@ class BDTConnection extends EventEmitter {
             }
             if (this.m_createFrom === BDTConnection.CREATE_FROM.acceptor) {
                 if (this.m_state === BDTConnection.STATE.init) {
-                    blog.debug(`[BDT]: connection(id=${this.m_id}) update connecting remote address to ${remoteSender.remoteEPList}`);
+                    blog.debug(`[BDT]: connection(id=${this.id}) update connecting remote address to ${remoteSender.remoteEPList}`);
                     this._changeState(BDTConnection.STATE.waitAckAck, remoteSender);
                 } else if (!this.m_useTCP) {
                     // 任何时候收到syn 也应该回复ack， 防止ack丢失
@@ -858,6 +882,11 @@ class BDTConnection extends EventEmitter {
             if (this.m_stack.options.debug) {
                 this.queryRemote.sn.finishsn = this.queryRemote.sn.finishsn || TimeHelper.uptimeMS();
                 foundSNList.forEach(p => {
+                    this.m_stack._filterInvalidAddress(p);
+                    if (!p || p.eplist.length === 0) {
+                        return;
+                    }
+
                     for (let sn of this.queryRemote.sn.snList) {
                         if (sn.pid === p.peerid) {
                             return;
@@ -871,6 +900,11 @@ class BDTConnection extends EventEmitter {
             let nextResendTime = resendTimes + 3;
             let newSNList = [];
             foundSNList.forEach(peer => {
+                this.m_stack._filterInvalidAddress(peer);
+                if (!peer || peer.eplist.length === 0) {
+                    return;
+                }
+
                 for (let existSN of this.m_snCall.snPeers) {
                     if (existSN.peerid === peer.peerid) {
                         return;
@@ -895,7 +929,7 @@ class BDTConnection extends EventEmitter {
             });
 
             if (newSNList.length > 0) {
-                blog.debug(`[BDT]: connection(id=${this.m_id}) find new sn: ${JSON.stringify(newSNList.map(sn => sn.peerid))}`);
+                blog.debug(`[BDT]: connection(id=${this.id}) find new sn: ${JSON.stringify(newSNList.map(sn => sn.peerid))}`);
             }
 
             if (newSNList.length === this.m_snCall.snPeers.length) {
@@ -1037,7 +1071,7 @@ class BDTConnection extends EventEmitter {
                 if (this.m_state === BDTConnection.STATE.waitAck) {
                     if (peer.eplist.length) {
                         this._addRemoteEP(peer.eplist);
-                        blog.debug(`[BDT]: connection(id=${this.m_id}) update connecting remote address to ${peer.eplist}`);
+                        blog.debug(`[BDT]: connection(id=${this.id}) update connecting remote address to ${peer.eplist}`);
                     }
                 }
             }
@@ -1231,8 +1265,17 @@ class BDTConnection extends EventEmitter {
 
     _addRemoteEP(eplist, dynamics) {
         if (this.m_tryConnect) {
+            const filterAddress = eplist => {
+                let peer = {
+                    peerid: this.m_remote.peerid,
+                    eplist,
+                }
+                return this.m_stack._filterInvalidAddress(peer).eplist;
+            }
             eplist = eplist || [];
+            eplist = filterAddress(eplist);
             if (dynamics) {
+                dynamics = filterAddress(dynamics);
                 dynamics = dynamics.filter(ep => {
                     if (!this.m_tryConnect.dynamics.has(ep)) {
                         this.m_tryConnect.dynamics.add(ep);
@@ -1303,7 +1346,7 @@ class BDTConnection extends EventEmitter {
             return ;
         }
         
-        blog.info(`[BDT]: connection(id=${this.m_id}) change state from ${BDTConnection.STATE.toString(this.m_state)} to ${BDTConnection.STATE.toString(newState)}`);
+        blog.info(`[BDT]: connection(id=${this.id}) change state from ${BDTConnection.STATE.toString(this.m_state)} to ${BDTConnection.STATE.toString(newState)}, ${this.remote.endpoint}`);
         this.m_state = newState;
         
         if (newState === BDTConnection.STATE.establish) {

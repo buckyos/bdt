@@ -69,8 +69,8 @@ class SimpleSNFinder extends PeerFinder {
     }
 }
 
-function newStack(peerid, eplist, mixSocket, peerFinder, options) {
-    let stack = new BDTStack(peerid, eplist, mixSocket, peerFinder, options);
+function newStack(peerid, eplist, mixSocket, peerFinder, remoteFilter, options) {
+    let stack = new BDTStack(peerid, eplist, mixSocket, peerFinder, remoteFilter, options);
     stack.newAcceptor = (acceptorOptions)=>{
         return new BDTAcceptor(stack, acceptorOptions);
     };

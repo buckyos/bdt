@@ -36,7 +36,7 @@ const assert = require('assert');
 const DynamicSocket = require('./dynamic_socket');
 
 class BDTStack extends EventEmitter {
-    constructor(peerid, eplist, mixSocket, peerFinder, options) {
+    constructor(peerid, eplist, mixSocket, peerFinder, remoteFilter, options) {
         super();
         this.m_peerid = peerid;
         this.m_peeridHash = BDTPackage.hashPeerid(this.m_peerid);
@@ -71,6 +71,15 @@ class BDTStack extends EventEmitter {
         this.m_mixSocket = mixSocket;
         this.m_peerFinder = peerFinder;
         this.m_eplist = eplist;
+        if (remoteFilter) {
+            this.m_remoteFilter = remoteFilter;
+        } else {
+            this.m_remoteFilter = {
+                isForbidden() {
+                    return false;
+                }
+            };
+        }
 
         this.m_dynamicSocket = null;
 
@@ -194,6 +203,10 @@ class BDTStack extends EventEmitter {
 
     get pingClient() {
         return this.m_pingClient;
+    }
+
+    get remoteFilter() {
+        return this.m_remoteFilter;
     }
 
     //event create
@@ -484,7 +497,7 @@ class BDTStack extends EventEmitter {
                 this.m_pingClient._onPackage(decoder, remoteSender);
             }
         } else if (header.cmdType > BDTPackage.CMD_TYPE.pingResp) {
-            blog.debug(`[BDT]: stack recv ${BDTPackage.CMD_TYPE.toString(header.cmdType)} package from ${header.src.peeridHash}:${header.src.vport} ${remote.address}:${remote.port} to ${header.dest.vport}, seq:${header.seq}, ackseq:${header.ackSeq}, flags:${header.flags}`);
+            blog.debug(`[BDT]: stack recv ${BDTPackage.CMD_TYPE.toString(header.cmdType)} package from ${header.src.peeridHash}:${header.src.vport} ${remoteSender.remoteEPList[0]} to ${header.dest.vport}, sessionid:${header.sessionid}, seq:${header.seq}, ackseq:${header.ackSeq}, flags:${header.flags}`);
             if (header.cmdType >= BDTPackage.CMD_TYPE.syn) {
                 this._updateRemoteCache(header.src.peeridHash, remoteSender);
             }
@@ -514,6 +527,13 @@ class BDTStack extends EventEmitter {
                 entry._onPackage(decoder, remoteSender, isDynamic);
             }
         }
+    }
+
+    _filterInvalidAddress(peer) {
+        if (peer && peer.eplist) {
+            peer.eplist = peer.eplist.filter(ep => !this.m_remoteFilter.isForbidden(ep, peer.peerid));
+        }
+        return peer;
     }
 }
 

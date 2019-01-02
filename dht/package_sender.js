@@ -48,11 +48,12 @@ const LOG_ASSERT = Base.BX_ASSERT;
 const LOG_ERROR = Base.BX_ERROR;
 
 class PackageSender extends EventEmitter {
-    constructor(mixSocket, bucket) {
+    constructor(mixSocket, bucket, remoteFilter) {
         super();
         this.m_mixSocket = mixSocket;
         this.m_bucket = bucket;
         this.m_taskExecutor = null;
+        this.m_remoteFilter = remoteFilter;
         this.m_pendingPkgs = new Set(); // <'peerid@seq'>
         this.m_pendingQueue = []; // {'peerid@seq', time}
     }
@@ -138,6 +139,8 @@ class PackageSender extends EventEmitter {
             dropBusyTCP: true,
             timeout,
         };
+
+        eplist = eplist.filter(ep => !this.m_remoteFilter.isForbidden(ep, toPeer.peerid));
         this.m_mixSocket.send(cmdPackage, eplist, options);
     }
 

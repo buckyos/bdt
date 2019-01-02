@@ -109,7 +109,7 @@ class BDTAcceptor extends EventEmitter {
         if (header.cmdType === BDTPackage.CMD_TYPE.calledReq
             || header.cmdType === BDTPackage.CMD_TYPE.syn) {
             if (this.m_state !== BDTAcceptor.STATE.listening) {
-                return ;
+                return;
             }
             if (typeof decoder.body.src !== 'string' || decoder.body.src.length === 0) {
                 return;

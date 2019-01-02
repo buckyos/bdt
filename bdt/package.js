@@ -424,7 +424,7 @@ class BDTPackageSender {
                 }
             }
 
-            blog.debug(`[BDT]: post ${BDTPackage.CMD_TYPE.toString(header.cmdType)} from ${localAddr.address}:${localAddr.port} to remote ${EndPoint.toString(remoteAddr)},seq:${header.seq},ackSeq:${header.ackSeq},flags:${header.flags}`);
+            blog.debug(`[BDT]: post ${BDTPackage.CMD_TYPE.toString(header.cmdType)} from ${localAddr.address}:${localAddr.port} to remote ${EndPoint.toString(remoteAddr)},sessionid:${header.sessionid}, seq:${header.seq},ackSeq:${header.ackSeq},flags:${header.flags}`);
 
             assert(encoder.header.totalLength === packageBuffer.length, `totalLength:${encoder.header.totalLength},buffer.length:${packageBuffer.length}`);
             if (onPreSend) {
@@ -470,6 +470,10 @@ class BDTPackageSender {
         if (ep) {
             this.addRemoteEPList([ep]);
         }
+    }
+
+    get activeEP() {
+        return this.m_activeEP;
     }
 
     addRemoteEPList(addEPList) {

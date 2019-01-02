@@ -62,11 +62,11 @@ const BASE_DHT_SERVICE_ID = '';
 
 
 class DHTBase extends EventEmitter {
-    constructor(mixSocket, localPeer, packageFactory, taskMgr) {
+    constructor(mixSocket, localPeer, packageFactory, taskMgr, remoteFilter) {
         super();
         this.m_bucket = new Bucket(localPeer, {appid: packageFactory.appid});
         this.m_distributedValueTable = new DistributedValueTable({appid: packageFactory.appid});
-        this.m_packageSender = new PackageSender(mixSocket, this.m_bucket);
+        this.m_packageSender = new PackageSender(mixSocket, this.m_bucket, remoteFilter);
         this.m_packageFactory = packageFactory;
         this.m_broadcastEventEmitter = new EventEmitter();
         
@@ -594,20 +594,29 @@ class DHT extends DHTBase {
     }
     localPeerInfo: PEERINFO
      */
-    constructor(mixSocket, localPeerInfo, appid = DHTAPPID.none) {
+    constructor(mixSocket, localPeerInfo, appid = DHTAPPID.none, remoteFilter) {
         LOG_INFO(`[DHT(${appid})] DHT will be created with mixSocket:${mixSocket}, and localPeerInfo:(peerid:${localPeerInfo.peerid}, eplist:${localPeerInfo.eplist})`);
         LOG_ASSERT(Peer.isValidPeerid(localPeerInfo.peerid), `[DHT(${appid})] Local peerid is invalid:${localPeerInfo.peerid}.`);
+
+        if (!remoteFilter) {
+            remoteFilter = {
+                isForbidden() {
+                    return false;
+                }
+            };
+        }
 
         let localPeer = new LocalPeer(localPeerInfo);
         localPeer.___create_flag = 160809;
         let packageFactory = new DHTPackageFactory(appid);
         let taskMgr = new TaskMgr();
-        super(mixSocket, localPeer, packageFactory, taskMgr);
+        super(mixSocket, localPeer, packageFactory, taskMgr, remoteFilter);
         this.m_taskMgr = taskMgr;
         this.m_timer = null;
         this.m_highFrequencyTimer = null;
 
         this.m_piecePackageRebuilder = new PiecePackageRebuilder();
+        this.m_remoteFilter = remoteFilter;
     }
 
     get appid() {
@@ -750,6 +759,10 @@ class DHT extends DHTBase {
         if (typeof cmdPackage.src.peerid !== 'string' || cmdPackage.src.peerid.length === 0 ||
             !HashDistance.checkEqualHash(cmdPackage.src.hash, HashDistance.hash(cmdPackage.src.peerid))) {
             LOG_WARN(`[DHT(${this.appid})] LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got package hash verify failed.(id:${cmdPackage.dest.peerid},hash:${cmdPackage.dest.hash}), localPeer is (id:${localPeer.peerid},hash:${localPeer.hash})`);
+            return dhtDecoder.totalLength;
+        }
+
+        if (this.m_remoteFilter.isForbidden(remoteAddr, cmdPackage.src.peerid)) {
             return dhtDecoder.totalLength;
         }
 
@@ -948,7 +961,8 @@ class ServiceDHT extends DHTBase {
         super(father.m_packageSender.mixSocket,
             father.m_bucket.localPeer,
             father.m_packageFactory,
-            father.m_taskExecutor.taskMgr);
+            father.m_taskExecutor.taskMgr,
+            father.m_remoteFilter);
 
         this.m_father = father;
         this.m_serviceID = serviceID;
